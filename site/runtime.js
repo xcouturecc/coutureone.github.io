@@ -123,6 +123,7 @@
     ];
 
     Array.from(social.querySelectorAll('a[href]')).forEach((anchor) => {
+      if (anchor.hasAttribute('aria-label')) return;
       const href = anchor.href || anchor.getAttribute('href') || '';
       const match = labels.find(({ test }) => test(href));
       if (!match) return;

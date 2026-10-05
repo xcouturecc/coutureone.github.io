@@ -40,3 +40,12 @@ Source rollback is tested separately in an isolated checkout; see ROLLBACK.md.
 After merging/deploying this branch, the scheduled workflow checks for new content
 every 30 minutes (GitHub may delay scheduled jobs). Manual workflow dispatch
 updates sooner. Writing and commenting still happen in GitHub Issues.
+
+## Production deployment — 2026-10-05
+
+The verified version was pushed to main and Vercel reported READY. Production
+aliases include blog.xcouture.cc. Project/deployment access succeeded without
+an explicit team scope, resolving the earlier 403 limitation. The initial
+Refresh static blog workflow completed successfully, including route tests,
+unit tests, generation, and validation of all generated pages. The previous
+production deployment and both source tags were saved before publishing.

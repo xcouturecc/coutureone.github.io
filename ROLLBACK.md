@@ -26,18 +26,26 @@ For immediate recovery in Vercel, open the previous successful production
 deployment and use **Instant Rollback**. Restore the entire deployment, including
 its configuration, rather than only copying an HTML file.
 
-For a durable source rollback, revert the static-performance commit on the
-production branch, then push:
+For a durable source rollback, restore the complete typography checkpoint. This
+also handles later automatically generated-page commits without reverting each
+one separately. Start with a clean working tree, disable the refresh workflow,
+and update the local production branch first:
 
 ```sh
-git revert --no-edit optimization/static-performance
-git push
+git diff --quiet && git diff --cached --quiet || exit 1
+gh workflow disable build-static.yml --repo xcouturecc/coutureone.github.io
+git switch main
+git pull --ff-only
+git restore --source rollback/before-static-performance --staged --worktree -- .
+git commit -m "Restore pre-optimization blog"
+git push origin main
 ```
 
-The tag is created only after verification. This restores the previous `docs/` and removes the
-static generator, workflow and Vercel config together. If additional automated
-refresh commits exist, first disable **Refresh static blog** in GitHub Actions,
-then revert those generated-page commits followed by the performance commit.
+This exact tree-restoration approach is also verified in an isolated checkout.
+The original production deployment is
+`dpl_6SpfzBcMejYnJW1aLMyXve7v9o23` (commit `fb49d1b`); its ID and URL are also
+saved in `/Users/couture/Documents/ChatGPT/blog/backups/production-before-deploy.json`.
+
 Avoid `git reset --hard` when unrelated local changes exist.
 
 The typography checkpoint still loads articles through GitHub API; the older

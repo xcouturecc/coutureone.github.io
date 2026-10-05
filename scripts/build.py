@@ -187,6 +187,12 @@ def esc(value):
     return html.escape(str(value), quote=True)
 
 
+def asset_url(name):
+    source = ROOT / 'site' / name
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
+    return f'/assets/{source.stem}.{digest}{source.suffix}'
+
+
 def page(title, body, path='/', description='用于记录一些琐碎', article=None):
     meta = ''
     if article:
@@ -195,9 +201,9 @@ def page(title, body, path='/', description='用于记录一些琐碎', article=
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title><meta name="description" content="{esc(description[:160])}">
 <link rel="canonical" href="{ORIGIN}{path}"><meta property="og:title" content="{esc(title)}"><meta property="og:url" content="{ORIGIN}{path}">{meta}
-<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
-<script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/base.css"><link rel="stylesheet" href="/assets/theme.css">
-<script src="/assets/runtime.js" defer></script></head><body>
+<link rel="icon" href="{asset_url('favicon.svg')}" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
+<script src="{asset_url('theme-init.js')}"></script><link rel="stylesheet" href="{asset_url('base.css')}"><link rel="stylesheet" href="{asset_url('theme.css')}">
+<script src="{asset_url('runtime.js')}" defer></script></head><body>
 <button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
 <main class="page"><div>{body}<footer id="footer">© {datetime.now(ZoneInfo('Asia/Shanghai')).year} Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/{REPO}/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
 </body></html>'''
@@ -236,7 +242,8 @@ def build(output, issues, images=True):
         assets.stats['external'] = len(unavailable)
     (output / 'assets').mkdir(parents=True, exist_ok=True)
     for name in ['base.css', 'theme.css', 'runtime.js', 'favicon.svg', 'theme-init.js', 'LICENSE-Mirror.txt', 'LICENSE-github-markdown-css.txt']:
-        shutil.copy2(ROOT / 'site' / name, output / 'assets' / name)
+        destination = asset_url(name).split('/')[-1] if name.endswith(('.css', '.js', '.svg')) else name
+        shutil.copy2(ROOT / 'site' / name, output / 'assets' / destination)
     user = issues[0]['user']
     avatar = assets.image(user['avatar_url'] + '&s=200')
     avatar_src = avatar['src'] if avatar else user['avatar_url']

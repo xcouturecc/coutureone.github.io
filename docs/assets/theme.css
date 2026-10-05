@@ -644,7 +644,8 @@
     }
   
 /* Static pages use native scrolling instead of Mirror's fixed page scroller. */
-html, body { min-height: 100%; }
+html { height: auto; min-height: 100%; overflow-y: auto; }
+body { height: auto; min-height: 100vh; overflow: visible; }
 .page { position: static; height: auto; overflow: visible; transform: none; }
 .page > div { margin: 0 auto; }
 #post { padding-top: 48px; }

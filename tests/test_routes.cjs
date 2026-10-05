@@ -11,6 +11,7 @@ async function route(hash) {
     localStorage: {getItem() {return null}},
     matchMedia() {return {matches: false}},
     location: {hash, search: '', replace(value) {redirected.push(value)}},
+    addEventListener() {},
     atob: value => Buffer.from(value, 'base64').toString(),
     fetch: async () => ({json: async () => ({[date]: 1, __count: 9})}),
   });

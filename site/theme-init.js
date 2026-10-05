@@ -6,6 +6,7 @@
     theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
   document.documentElement.setAttribute('data-theme', theme);
+  function redirectLegacy() {
   const hash = location.hash;
   const post = hash.match(/^#\/posts\/(\d+)(?:\/)?$/);
   if (post) location.replace('/posts/' + post[1] + '/' + location.search);
@@ -26,4 +27,7 @@
       } else location.replace('/');
     } catch (_) { location.replace('/'); }
   }
+  }
+  redirectLegacy();
+  addEventListener('hashchange', redirectLegacy);
 })();

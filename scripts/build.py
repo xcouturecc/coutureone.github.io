@@ -205,7 +205,7 @@ def page(title, body, path='/', description='用于记录一些琐碎', article=
 <script src="{asset_url('theme-init.js')}"></script><link rel="stylesheet" href="{asset_url('base.css')}"><link rel="stylesheet" href="{asset_url('theme.css')}">
 <script src="{asset_url('runtime.js')}" defer></script></head><body>
 <button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
-<main class="page"><div>{body}<footer id="footer">© {datetime.now(ZoneInfo('Asia/Shanghai')).year} Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/{REPO}/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+<main class="page {'article-page' if article else 'listing-page'}"><div>{body}<footer id="footer">© {datetime.now(ZoneInfo('Asia/Shanghai')).year} Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/{REPO}/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
 </body></html>'''
 
 

@@ -553,12 +553,12 @@
     }
 
     /* Local system fonts and comfortable reading proportions. */
-    .page > div {
+    .article-page > div {
       max-width: 720px !important;
       padding: 0 24px 64px !important;
     }
 
-    #post > h1, #user h1 {
+    #post > h1 {
       color: var(--text-color) !important;
       font-size: clamp(28px, 4vw, 40px) !important;
       font-weight: 600 !important;
@@ -567,18 +567,8 @@
       overflow-wrap: anywhere !important;
     }
 
-    #posts > .post {
-      padding: 24px 12px !important;
-    }
-
-    #posts h2 {
+    #user h1, #posts h2 {
       color: var(--text-color) !important;
-      font-size: 20px !important;
-      line-height: 1.45 !important;
-      font-weight: 600 !important;
-      white-space: normal !important;
-      overflow-wrap: anywhere !important;
-      text-wrap: balance !important;
     }
 
     #post > .markdown-body {
@@ -619,10 +609,8 @@
     .markdown-body pre code { font-size: inherit !important; }
 
     @media (max-width: 600px) {
-      .page > div { padding: 0 20px 48px !important; }
+      .article-page > div { padding: 0 20px 48px !important; }
       .markdown-body { font-size: 16px !important; line-height: 1.8 !important; }
-      #posts h2 { font-size: 18px !important; width: 100% !important; }
-      #posts > .post { padding: 20px 0 !important; }
       #post > .markdown-body { margin-top: 32px !important; }
     }
 
@@ -653,18 +641,17 @@ body { height: auto; min-height: 100vh; overflow: visible; }
 #post .back { position: static; display: inline-flex; margin-right: 0; margin-bottom: 24px; width: 30px; height: 30px; }
 #post > h1 { margin: 0; }
 #post > .markdown-body:before { display: none; }
-#posts { padding-bottom: 24px; }
-#posts > .post:first-child { margin-top: 32px; }
 #posts > .post h2 { margin: 0; }
-#posts > .post:hover { background: var(--button-hover-bg) !important; border-radius: 8px; }
-#posts > .post span { font-size: 12px; }
+#posts > .post:hover { background: var(--button-hover-bg) !important; }
 #user p { color: var(--text-color); opacity: .7; }
 #user img { object-fit: cover; }
 #post > p, #posts p { color: var(--text-color); opacity: .65; }
 #post .labels a { color: var(--markdown-link-color); }
 #footer { color: var(--text-color); opacity: .7; padding: 32px 0; }
+.listing-page #footer { padding: 0 0 70px; }
 #footer a { color: inherit; }
-.pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 24px; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.pagination .button { width: 100px; margin: 50px 0 0; }
 .comments-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
 #comments .comment { border-top: 1px solid var(--border-color); padding-top: 24px; margin-top: 24px; }
 .comment-author { color: var(--markdown-link-color); }

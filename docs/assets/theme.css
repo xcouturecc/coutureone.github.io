@@ -1,0 +1,682 @@
+
+    /* Fast local font stack: no remote font downloads. */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --font-mermaid: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      font-family: var(--font-sans) !important;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 0;
+      text-rendering: optimizeLegibility;
+      -moz-osx-font-smoothing: grayscale;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    input, button, textarea, select {
+      font: inherit;
+    }
+
+    .markdown-body {
+      font-family: var(--font-sans) !important;
+    }
+
+    #user, #posts, #post, #comments {
+      font-family: var(--font-sans) !important;
+    }
+
+    pre, code {
+      font-family: var(--font-mono) !important;
+    }
+
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #24292f;
+      --border-color: #d0d7de;
+      --button-bg: #f6f8fa;
+      --button-text: #24292f;
+      --button-border: #d0d7de;
+      --button-hover-bg: #f3f4f6;
+      --code-bg: #f6f8fa;
+      --code-text: #24292e;
+      --code-border: #e1e4e8;
+      --inline-code-bg: #f6f8fa;
+      --inline-code-text: #24292e;
+      --markdown-link-color: #0969da;
+      --table-bg: #ffffff;
+      --table-header-bg: #f6f8fa;
+      --table-row-alt-bg: #f6f8fa;
+      --table-text-color: #24292f;
+      --table-border-color: #d0d7de;
+      --progress-color: #0969da;
+      --progress-bg: rgba(0, 0, 0, 0.1);
+      --bar-border-color: #ffffff;
+      --social-divider-color: rgba(36, 41, 47, 0.35);
+      --mermaid-bg: #f6f8fa;
+      --tag-bg: #f6f8fa;
+      --tag-text: #57606a;
+      --tag-border: #d0d7de;
+    }
+
+    [data-theme="dark"] {
+      --bg-color: #0d1117;
+      --text-color: #c9d1d9;
+      --border-color: #30363d;
+      --button-bg: #21262d;
+      --button-text: #c9d1d9;
+      --button-border: #30363d;
+      --button-hover-bg: #30363d;
+      --code-bg: #161b22;
+      --code-text: #e6edf3;
+      --code-border: #30363d;
+      --inline-code-bg: #161b22;
+      --inline-code-text: #e6edf3;
+      --markdown-link-color: #58a6ff;
+      --table-bg: #0d1117;
+      --table-header-bg: #161b22;
+      --table-row-alt-bg: #161b22;
+      --table-text-color: #c9d1d9;
+      --table-border-color: #30363d;
+      --progress-color: #ffffff;
+      --progress-bg: rgba(255, 255, 255, 0.1);
+      --bar-border-color: #0d1117;
+      --social-divider-color: rgba(201, 209, 217, 0.72);
+      --mermaid-bg: #161b22;
+      --tag-bg: #161b22;
+      --tag-text: #8b949e;
+      --tag-border: #30363d;
+    }
+
+    /* 全局背景和文字颜色 */
+    html, body {
+      background-color: var(--bg-color) !important;
+      color: var(--text-color) !important;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* 页面容器背景 */
+    .page {
+      background-color: var(--bg-color) !important;
+      color: var(--text-color) !important;
+    }
+
+    /* 内容区域背景 */
+    #user, #posts, #post, #comments {
+      background-color: var(--bg-color) !important;
+      color: var(--text-color) !important;
+    }
+
+    /* Markdown内容区域 */
+    .markdown-body {
+      background-color: var(--bg-color) !important;
+      color: var(--text-color) !important;
+      --color-fg-default: var(--text-color);
+      --color-canvas-default: var(--bg-color);
+      --color-canvas-subtle: var(--table-row-alt-bg);
+      --color-border-default: var(--border-color);
+      --color-border-muted: var(--border-color);
+      --color-accent-fg: var(--markdown-link-color);
+      --fgColor-default: var(--text-color);
+      --fgColor-accent: var(--markdown-link-color);
+      --bgColor-default: var(--bg-color);
+      --bgColor-muted: var(--table-row-alt-bg);
+      --borderColor-default: var(--border-color);
+      --borderColor-muted: var(--border-color);
+    }
+
+    /* 文章列表项 */
+    #posts .post {
+      background-color: var(--bg-color) !important;
+      color: var(--text-color) !important;
+    }
+
+    #posts > .post span {
+      background-color: var(--tag-bg) !important;
+      color: var(--tag-text) !important;
+      border-color: var(--tag-border) !important;
+      transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    }
+
+    /* 按钮样式 - 完美居中 */
+    button, .button, a.button {
+      padding: 6px 12px !important;
+      background-color: var(--button-bg) !important;
+      color: var(--button-text) !important;
+      border: 1px solid var(--button-border) !important;
+      border-radius: 6px !important;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-family: inherit;
+      text-decoration: none !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      text-align: center !important;
+      box-sizing: border-box;
+      line-height: 1.2 !important;
+      min-height: 32px;
+      vertical-align: middle;
+    }
+
+    button:hover, .button:hover, a.button:hover {
+      background-color: var(--button-hover-bg) !important;
+      color: var(--button-text) !important;
+    }
+
+    /* 主题切换按钮 */
+    .theme-toggle {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      width: 32px;
+      height: 32px;
+      padding: 4px;
+      background: transparent !important;
+      border: none !important;
+      cursor: pointer;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      border-radius: 50%;
+      transition: background-color 0.3s ease;
+    }
+
+    .theme-toggle:hover {
+      background: var(--button-hover-bg) !important;
+    }
+
+    .theme-toggle .sun, .theme-toggle .moon {
+      position: absolute;
+      transition: opacity 0.3s ease;
+    }
+
+    .theme-toggle .sun { opacity: 0; }
+    .theme-toggle .moon { opacity: 1; }
+
+    [data-theme="dark"] .theme-toggle .sun { opacity: 1; }
+    [data-theme="dark"] .theme-toggle .moon { opacity: 0; }
+
+    #user .social {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      column-gap: 22px;
+      row-gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    #user .social a {
+      width: 18px;
+      height: 18px;
+      margin: 0 !important;
+      color: var(--text-color);
+      opacity: 0.62;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    #user .social a:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    #user .social svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+
+    #user .social svg path {
+      fill: currentColor !important;
+    }
+
+    #user .social:after {
+      flex: 0 0 100%;
+      width: 100%;
+      height: 1px;
+      margin: 4px 0 0 !important;
+      color: var(--social-divider-color);
+      background: linear-gradient(to right, transparent 25%, currentColor 25%, currentColor 75%, transparent 75%) !important;
+    }
+
+    /* Mermaid图表样式 */
+    .mermaid-panel {
+      margin: 20px 0;
+    }
+
+    .mermaid-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .mermaid-tool {
+      width: 28px;
+      height: 28px;
+      min-height: 28px;
+      padding: 0 !important;
+      border-radius: 6px !important;
+      color: var(--button-text) !important;
+      background: var(--button-bg) !important;
+      border: 1px solid var(--button-border) !important;
+    }
+
+    .mermaid-tool svg {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+    }
+
+    .mermaid-diagram {
+      text-align: left;
+      width: 100%;
+      margin: 0;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background-color: var(--mermaid-bg) !important;
+      box-sizing: border-box;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      cursor: zoom-in;
+    }
+
+    .mermaid-diagram svg {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+      margin: 0 auto;
+      background: transparent !important;
+      font-family: var(--font-mermaid) !important;
+    }
+
+    .mermaid-diagram svg *,
+    .mermaid-diagram foreignObject,
+    .mermaid-diagram foreignObject * {
+      font-family: var(--font-mermaid) !important;
+    }
+
+    .mermaid-diagram.is-wide svg {
+      width: var(--mermaid-svg-width, 960px) !important;
+      max-width: none !important;
+    }
+
+    .mermaid-diagram.is-tall {
+      max-height: min(72vh, 760px);
+    }
+
+    .mermaid-panel.is-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      margin: 0;
+      padding: 14px;
+      background: var(--bg-color);
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .mermaid-panel.is-fullscreen .mermaid-toolbar {
+      justify-content: flex-end;
+      margin-bottom: 0;
+      flex: 0 0 auto;
+    }
+
+    .mermaid-panel.is-fullscreen .mermaid-diagram {
+      flex: 1 1 auto;
+      height: auto;
+      min-height: 0;
+      max-height: none;
+      cursor: default;
+      overscroll-behavior: contain;
+    }
+
+    body.mermaid-fullscreen {
+      overflow: hidden;
+    }
+
+    .markdown-body .js-render-enrichment-loader,
+    .markdown-body .octospinner {
+      display: none !important;
+    }
+
+    .mermaid-error {
+      margin: 16px 0;
+      padding: 12px;
+      border: 1px solid #f85149;
+      border-radius: 6px;
+      background: rgba(248, 81, 73, 0.08);
+      color: #f85149;
+      font-family: var(--font-mono) !important;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    /* 代码块样式 - 强制主题应用 */
+    pre {
+      background: var(--code-bg) !important;
+      border: 1px solid var(--code-border) !important;
+      border-radius: 6px;
+      padding: 16px;
+      margin: 16px 0;
+      overflow-x: auto;
+      font-family: var(--font-mono) !important;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--code-text) !important;
+    }
+
+    pre code {
+      color: var(--code-text) !important;
+      background: transparent !important;
+      padding: 0;
+      border: none;
+      font-family: inherit !important;
+    }
+
+    /* 行内代码样式 */
+    :not(pre) > code, code {
+      background: var(--inline-code-bg) !important;
+      color: var(--inline-code-text) !important;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      border: 1px solid var(--code-border) !important;
+      font-family: var(--font-mono) !important;
+    }
+
+    /* Markdown中的代码块 */
+    .markdown-body pre {
+      background: var(--code-bg) !important;
+      border: 1px solid var(--code-border) !important;
+      color: var(--code-text) !important;
+    }
+
+    .markdown-body pre code {
+      color: var(--code-text) !important;
+      background: transparent !important;
+    }
+
+    .markdown-body code {
+      background: var(--inline-code-bg) !important;
+      color: var(--inline-code-text) !important;
+      border: 1px solid var(--code-border) !important;
+    }
+
+    .markdown-body table {
+      display: block;
+      width: max-content;
+      max-width: 100%;
+      margin: 16px 0;
+      overflow-x: auto;
+      border-spacing: 0;
+      border-collapse: collapse;
+      color: var(--table-text-color) !important;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .markdown-body table tr {
+      background: var(--table-bg) !important;
+      border-top: 1px solid var(--table-border-color) !important;
+    }
+
+    .markdown-body table tr:nth-child(2n) {
+      background: var(--table-row-alt-bg) !important;
+    }
+
+    .markdown-body table th,
+    .markdown-body table td {
+      padding: 6px 13px;
+      border: 1px solid var(--table-border-color) !important;
+      color: var(--table-text-color) !important;
+    }
+
+    .markdown-body table th {
+      font-weight: 600;
+      background: var(--table-header-bg) !important;
+    }
+
+    .markdown-body table a {
+      color: var(--markdown-link-color) !important;
+    }
+
+    .markdown-body img {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .markdown-body pre {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* 高亮代码块 */
+    .highlight pre {
+      background: var(--code-bg) !important;
+      color: var(--code-text) !important;
+    }
+
+    /* 加载动画 */
+    .loading, .error, .transition { height: 100%; }
+    .loading body, .error body, .transition body { height: 100%; }
+
+    #loader {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, .95);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+
+    .loading #loader { display: flex; }
+
+    #loader div {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border: 3px solid transparent;
+      border-radius: 50%;
+    }
+
+    #loader div:nth-child(1) {
+      border-top-color: #0089fa;
+      animation: spin 1s linear infinite;
+    }
+
+    #loader div:nth-child(2) {
+      width: 55px;
+      height: 55px;
+      border-right-color: #ff002b;
+      animation: spin 1.2s linear infinite reverse;
+    }
+
+    #loader div:nth-child(3) {
+      width: 70px;
+      height: 70px;
+      border-bottom-color: #ffa900;
+      animation: spin 1.4s linear infinite;
+    }
+
+    #loader div:nth-child(4) {
+      width: 85px;
+      height: 85px;
+      border-left-color: #00a753;
+      animation: spin 1.6s linear infinite reverse;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* 进度条样式 */
+    #bar {
+      z-index: 5;
+      position: absolute;
+      box-sizing: border-box;
+      border-right: 10px solid var(--bar-border-color);
+      border-left: 10px solid var(--bar-border-color);
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: var(--progress-color);
+      transition: all 1s ease;
+    }
+
+    #progress,
+    #bar {
+      display: none !important;
+    }
+
+    #progress-bar {
+      display: none !important;
+    }
+
+    /* Local system fonts and comfortable reading proportions. */
+    .page > div {
+      max-width: 720px !important;
+      padding: 0 24px 64px !important;
+    }
+
+    #post > h1, #user h1 {
+      color: var(--text-color) !important;
+      font-size: clamp(28px, 4vw, 40px) !important;
+      font-weight: 600 !important;
+      line-height: 1.25 !important;
+      text-wrap: balance !important;
+      overflow-wrap: anywhere !important;
+    }
+
+    #posts > .post {
+      padding: 24px 12px !important;
+    }
+
+    #posts h2 {
+      color: var(--text-color) !important;
+      font-size: 20px !important;
+      line-height: 1.45 !important;
+      font-weight: 600 !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      text-wrap: balance !important;
+    }
+
+    #post > .markdown-body {
+      margin-top: 48px !important;
+    }
+
+    .markdown-body {
+      font-size: 17px !important;
+      line-height: 1.85 !important;
+      word-break: normal !important;
+      overflow-wrap: anywhere !important;
+    }
+
+    .markdown-body p {
+      margin-top: 0 !important;
+      margin-bottom: 1.4em !important;
+      text-wrap: pretty !important;
+    }
+
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+      line-height: 1.35 !important;
+      font-weight: 600 !important;
+      margin-top: 1.8em !important;
+      margin-bottom: 0.7em !important;
+      text-wrap: balance !important;
+    }
+
+    .markdown-body h1, .markdown-body h2 {
+      border-bottom: none !important;
+      padding-bottom: 0 !important;
+    }
+
+    .markdown-body h1 { font-size: 1.8em !important; }
+    .markdown-body h2 { font-size: 1.45em !important; }
+    .markdown-body h3 { font-size: 1.2em !important; }
+    .markdown-body li + li { margin-top: 0.45em !important; }
+    .markdown-body pre { font-size: 14px !important; line-height: 1.6 !important; }
+    .markdown-body pre code { font-size: inherit !important; }
+
+    @media (max-width: 600px) {
+      .page > div { padding: 0 20px 48px !important; }
+      .markdown-body { font-size: 16px !important; line-height: 1.8 !important; }
+      #posts h2 { font-size: 18px !important; width: 100% !important; }
+      #posts > .post { padding: 20px 0 !important; }
+      #post > .markdown-body { margin-top: 32px !important; }
+    }
+
+    /* 响应式设计 */
+    @media (max-width: 768px) {
+      .theme-toggle {
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 28px;
+        height: 28px;
+        font-size: 18px;
+      }
+
+      .mermaid-toolbar {
+        justify-content: flex-start;
+        overflow-x: auto;
+        padding-bottom: 2px;
+      }
+    }
+  
+/* Static pages use native scrolling instead of Mirror's fixed page scroller. */
+html, body { min-height: 100%; }
+.page { position: static; height: auto; overflow: visible; transform: none; }
+.page > div { margin: 0 auto; }
+#post { padding-top: 48px; }
+#post > h1 { padding-top: 0; }
+#post .back { position: static; display: inline-flex; margin-right: 0; margin-bottom: 24px; width: 30px; height: 30px; }
+#post > h1 { margin: 0; }
+#post > .markdown-body:before { display: none; }
+#posts { padding-bottom: 24px; }
+#posts > .post:first-child { margin-top: 32px; }
+#posts > .post h2 { margin: 0; }
+#posts > .post:hover { background: var(--button-hover-bg) !important; border-radius: 8px; }
+#posts > .post span { font-size: 12px; }
+#user p { color: var(--text-color); opacity: .7; }
+#user img { object-fit: cover; }
+#post > p, #posts p { color: var(--text-color); opacity: .65; }
+#post .labels a { color: var(--markdown-link-color); }
+#footer { color: var(--text-color); opacity: .7; padding: 32px 0; }
+#footer a { color: inherit; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 24px; }
+.comments-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
+#comments .comment { border-top: 1px solid var(--border-color); padding-top: 24px; margin-top: 24px; }
+.comment-author { color: var(--markdown-link-color); }
+.comments-status { margin: 16px 0; }
+.markdown-body img { border-radius: 6px; }
+.markdown-body blockquote { color: var(--text-color); opacity: .85; border-left-color: var(--border-color); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--markdown-link-color); outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+[hidden] { display: none !important; }
+button:disabled { cursor: wait; opacity: .65; }
+.comment-list .comment-body { border-color: var(--border-color); }
+.comment-list .comment-body > a { color: var(--markdown-link-color); }
+.comment-list .comment-body:before { background: var(--bg-color); border-top-color: var(--border-color); border-left-color: var(--border-color); }
+.comment-list .markdown-body { white-space: normal; }

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用Gemini3 Pro优化苹果终端索引加载速度 - Couture&#x27;s Blog</title><meta name="description" content="自己一开始对苹果终端索引加载速度并不是很在意，毕竟随着自己用到的环境变量越来越多，终端加载速度越来越慢，慢到了超出了我难以接受的范围，加载索引都要5秒左右，测试一个 ping 都要等索引加载一段时间才可以，于是自己想到了用AI去优化这个索引加载。 提出需求： 我的三个配置文件分别如下： .zshrc : if [[ -">
+<link rel="canonical" href="https://blog.xcouture.cc/posts/29/"><meta property="og:title" content="使用Gemini3 Pro优化苹果终端索引加载速度 - Couture&#x27;s Blog"><meta property="og:url" content="https://blog.xcouture.cc/posts/29/"><meta property="og:type" content="article"><meta property="article:published_time" content="2026-01-10T06:33:47Z">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
+<script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/base.css"><link rel="stylesheet" href="/assets/theme.css">
+<script src="/assets/runtime.js" defer></script></head><body>
+<button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
+<main class="page"><div><article id="post"><a class="back" href="/" aria-label="返回"><svg xmlns="http://www.w3.org/2000/svg" class="icon" version="1" viewBox="0 0 1024 1024"><path d="M774 467H415l110-108c18-18 18-48 0-66a48 48 0 0 0-67 0L273 475a47 47 0 0 0-11 11 45 45 0 0 0 13 66l183 180c19 18 48 18 67 0 18-18 18-47 0-65L415 559h359c26 0 48-21 48-46s-22-46-48-46zm0 0"/><path d="M512 93a419 419 0 1 1 0 838 419 419 0 0 1 0-838m0-93A509 509 0 0 0 0 512a509 509 0 0 0 512 512 509 509 0 0 0 512-512A509 509 0 0 0 512 0z"/></svg></a><h1>使用Gemini3 Pro优化苹果终端索引加载速度</h1><p>Updated at<span>Jan 10, 2026</span></p><div class="markdown-body"><p dir="auto"> 自己一开始对苹果终端索引加载速度并不是很在意，毕竟随着自己用到的环境变量越来越多，终端加载速度越来越慢，慢到了超出了我难以接受的范围，加载索引都要5秒左右，测试一个<code class="notranslate">ping</code>都要等索引加载一段时间才可以，于是自己想到了用AI去优化这个索引加载。</p>
+<p dir="auto"> 提出需求：</p>
+<p dir="auto"><a href="/assets/images/d18a1337d8c72db18e18-1554.webp" rel="noopener noreferrer" target="_blank"><img alt="" decoding="async" height="450" loading="eager" sizes="(max-width: 600px) calc(100vw - 40px), 720px" src="/assets/images/d18a1337d8c72db18e18-1554.webp" srcset="/assets/images/d18a1337d8c72db18e18-800.webp 800w, /assets/images/d18a1337d8c72db18e18-1554.webp 1554w" width="1554"/></a></p>
+<p dir="auto"> 我的三个配置文件分别如下：</p>
+<p dir="auto"><code class="notranslate">.zshrc</code>:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="if [[ -r &quot;${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh&quot; ]]; then
+  source &quot;${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh&quot;
+fi
+
+export ZSH=&quot;$HOME/.oh-my-zsh&quot;
+
+ZSH_THEME=&quot;powerlevel10k/powerlevel10k&quot;
+
+
+plugins=(git autojump zsh-autosuggestions zsh-syntax-highlighting)
+
+source $ZSH/oh-my-zsh.sh
+
+eval &quot;$(/opt/homebrew/bin/brew shellenv)&quot;
+DISABLE_MAGIC_FUNCTIONS=true
+ zstyle ':omz:update' mode disabled
+export PATH=&quot;/opt/homebrew/opt/openjdk@17/bin:$PATH&quot;
+export PATH=&quot;$HOME/.jenv/bin:$PATH&quot;
+eval &quot;$(jenv init -)&quot;
+
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+export PATH=&quot;/opt/homebrew/opt/node@20/bin:$PATH&quot;
+
+
+# maven
+export MAVEN_HOME=&quot;$HOME/Java Development/apache-maven-3.8.8&quot;
+export PATH=&quot;$MAVEN_HOME/bin:$PATH&quot;
+
+export PATH=&quot;/opt/homebrew/opt/openssl@3/bin:$PATH&quot;
+export LDFLAGS=&quot;-L/opt/homebrew/opt/openssl@3/lib&quot;
+export CPPFLAGS=&quot;-I/opt/homebrew/opt/openssl@3/include&quot;
+export PKG_CONFIG_PATH=&quot;/opt/homebrew/opt/openssl@3/lib/pkgconfig&quot;
+
+
+export PATH=&quot;$HOME/bin:$PATH&quot;
+
+export PATH=&quot;/opt/homebrew/bin:$PATH&quot;
+
+
+# Created by `pipx` on 2024-11-09 06:23:41
+export PATH=&quot;$PATH:/Users/couture/.local/bin&quot;
+
+# Python
+export PATH=&quot;$HOME/.pyenv/bin:$PATH&quot;
+eval &quot;$(pyenv init --path)&quot;
+eval &quot;$(pyenv init -)&quot;
+
+# rust
+source $HOME/.cargo/env
+
+# MySQL 
+export PATH=$PATH:/usr/local/mysql/bin
+
+# Go
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOPATH/bin
+
+# Added by LM Studio CLI (lms)
+export PATH=&quot;$PATH:/Users/couture/.lmstudio/bin&quot;
+
+# Added by Antigravity
+export PATH=&quot;/Users/couture/.antigravity/antigravity/bin:$PATH&quot;
+" dir="auto"><pre class="notranslate"><span class="pl-k">if</span> [[ <span class="pl-k">-r</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">${XDG_CACHE_HOME<span class="pl-k">:-</span><span class="pl-smi">$HOME</span><span class="pl-k">/</span>.cache}</span>/p10k-instant-prompt-<span class="pl-smi">${(<span class="pl-k">%</span>)<span class="pl-k">:-%</span>n}</span>.zsh<span class="pl-pds">"</span></span> ]]<span class="pl-k">;</span> <span class="pl-k">then</span>
+  <span class="pl-c1">source</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">${XDG_CACHE_HOME<span class="pl-k">:-</span><span class="pl-smi">$HOME</span><span class="pl-k">/</span>.cache}</span>/p10k-instant-prompt-<span class="pl-smi">${(<span class="pl-k">%</span>)<span class="pl-k">:-%</span>n}</span>.zsh<span class="pl-pds">"</span></span>
+<span class="pl-k">fi</span>
+
+<span class="pl-k">export</span> ZSH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.oh-my-zsh<span class="pl-pds">"</span></span>
+
+ZSH_THEME=<span class="pl-s"><span class="pl-pds">"</span>powerlevel10k/powerlevel10k<span class="pl-pds">"</span></span>
+
+
+plugins=(git autojump zsh-autosuggestions zsh-syntax-highlighting)
+
+<span class="pl-c1">source</span> <span class="pl-smi">$ZSH</span>/oh-my-zsh.sh
+
+<span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>/opt/homebrew/bin/brew shellenv<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+DISABLE_MAGIC_FUNCTIONS=true
+ zstyle <span class="pl-s"><span class="pl-pds">'</span>:omz:update<span class="pl-pds">'</span></span> mode disabled
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span>/opt/homebrew/opt/openjdk@17/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.jenv/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+<span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>jenv init -<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.</span>
+[[ <span class="pl-k">!</span> <span class="pl-k">-f</span> <span class="pl-k">~</span>/.p10k.zsh ]] <span class="pl-k">||</span> <span class="pl-c1">source</span> <span class="pl-k">~</span>/.p10k.zsh
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span>/opt/homebrew/opt/node@20/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+
+
+<span class="pl-c"><span class="pl-c">#</span> maven</span>
+<span class="pl-k">export</span> MAVEN_HOME=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/Java Development/apache-maven-3.8.8<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$MAVEN_HOME</span>/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span>/opt/homebrew/opt/openssl@3/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> LDFLAGS=<span class="pl-s"><span class="pl-pds">"</span>-L/opt/homebrew/opt/openssl@3/lib<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> CPPFLAGS=<span class="pl-s"><span class="pl-pds">"</span>-I/opt/homebrew/opt/openssl@3/include<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> PKG_CONFIG_PATH=<span class="pl-s"><span class="pl-pds">"</span>/opt/homebrew/opt/openssl@3/lib/pkgconfig<span class="pl-pds">"</span></span>
+
+
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span>/opt/homebrew/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+
+
+<span class="pl-c"><span class="pl-c">#</span> Created by `pipx` on 2024-11-09 06:23:41</span>
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$PATH</span>:/Users/couture/.local/bin<span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> Python</span>
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.pyenv/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+<span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>pyenv init --path<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+<span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>pyenv init -<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> rust</span>
+<span class="pl-c1">source</span> <span class="pl-smi">$HOME</span>/.cargo/env
+
+<span class="pl-c"><span class="pl-c">#</span> MySQL </span>
+<span class="pl-k">export</span> PATH=<span class="pl-smi">$PATH</span>:/usr/local/mysql/bin
+
+<span class="pl-c"><span class="pl-c">#</span> Go</span>
+<span class="pl-k">export</span> GOPATH=<span class="pl-smi">$HOME</span>/go
+<span class="pl-k">export</span> PATH=<span class="pl-smi">$PATH</span>:<span class="pl-smi">$GOPATH</span>/bin
+
+<span class="pl-c"><span class="pl-c">#</span> Added by LM Studio CLI (lms)</span>
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$PATH</span>:/Users/couture/.lmstudio/bin<span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> Added by Antigravity</span>
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span>/Users/couture/.antigravity/antigravity/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+</pre></div>
+<p dir="auto"><code class="notranslate">.zprofile</code>:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="eval &quot;$(/opt/homebrew/bin/brew shellenv)&quot;
+
+# Created by `pipx` on 2024-11-09 06:23:41
+export PATH=&quot;$PATH:/Users/couture/.local/bin&quot;
+
+# Setting PATH for Python 3.11
+# The original version is saved in .zprofile.pysave
+PATH=&quot;/Library/Frameworks/Python.framework/Versions/3.11/bin:${PATH}&quot;
+export PATH
+
+# Added by OrbStack: command-line tools and integration
+# This won't be added again if you remove it.
+source ~/.orbstack/shell/init.zsh 2&gt;/dev/null || :
+" dir="auto"><pre class="notranslate"><span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>/opt/homebrew/bin/brew shellenv<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> Created by `pipx` on 2024-11-09 06:23:41</span>
+<span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$PATH</span>:/Users/couture/.local/bin<span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> Setting PATH for Python 3.11</span>
+<span class="pl-c"><span class="pl-c">#</span> The original version is saved in .zprofile.pysave</span>
+PATH=<span class="pl-s"><span class="pl-pds">"</span>/Library/Frameworks/Python.framework/Versions/3.11/bin:<span class="pl-smi">${PATH}</span><span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> PATH
+
+<span class="pl-c"><span class="pl-c">#</span> Added by OrbStack: command-line tools and integration</span>
+<span class="pl-c"><span class="pl-c">#</span> This won't be added again if you remove it.</span>
+<span class="pl-c1">source</span> <span class="pl-k">~</span>/.orbstack/shell/init.zsh <span class="pl-k">2&gt;</span>/dev/null <span class="pl-k">||</span> <span class="pl-c1">:</span>
+</pre></div>
+<p dir="auto"><code class="notranslate">.zshenv</code>:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content='. "$HOME/.cargo/env"' dir="auto"><pre class="notranslate"><span class="pl-c1">.</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.cargo/env<span class="pl-pds">"</span></span></pre></div>
+<p dir="auto"> 优化以后的输出结果</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# [1] Powerlevel10k Instant Prompt (必须放在文件最开头)
+if [[ -r &quot;${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh&quot; ]]; then
+  source &quot;${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh&quot;
+fi
+
+# [2] 基础环境变量与 PATH 优化 (合并所有 PATH 设置)
+# Homebrew (首先加载，确保基础命令可用)
+eval &quot;$(/opt/homebrew/bin/brew shellenv)&quot;
+
+# 定义路径变量
+export GOPATH=&quot;$HOME/go&quot;
+export MAVEN_HOME=&quot;$HOME/Java Development/apache-maven-3.8.8&quot;
+
+# 编译器标志 (OpenSSL)
+export LDFLAGS=&quot;-L/opt/homebrew/opt/openssl@3/lib&quot;
+export CPPFLAGS=&quot;-I/opt/homebrew/opt/openssl@3/include&quot;
+export PKG_CONFIG_PATH=&quot;/opt/homebrew/opt/openssl@3/lib/pkgconfig&quot;
+
+# 批量构建 PATH (注意顺序：自定义 &gt; Homebrew &gt; 系统)
+# 包含: Node@20, OpenJDK@17, Maven, MySQL, Go, LM Studio, Antigravity, User Bins
+path=(
+  &quot;$HOME/bin&quot;
+  &quot;$HOME/.local/bin&quot;
+  &quot;/opt/homebrew/opt/node@20/bin&quot;
+  &quot;/opt/homebrew/opt/openjdk@17/bin&quot;
+  &quot;$MAVEN_HOME/bin&quot;
+  &quot;/usr/local/mysql/bin&quot;
+  &quot;$GOPATH/bin&quot;
+  &quot;$HOME/.pyenv/bin&quot;
+  &quot;$HOME/.lmstudio/bin&quot;
+  &quot;/Users/couture/.antigravity/antigravity/bin&quot;
+  &quot;/Library/Frameworks/Python.framework/Versions/3.11/bin&quot;
+  $path
+)
+export PATH
+
+# [3] Oh My Zsh 配置
+export ZSH=&quot;$HOME/.oh-my-zsh&quot;
+ZSH_THEME=&quot;powerlevel10k/powerlevel10k&quot;
+# 禁用自动更新检查 (提升启动速度)
+zstyle ':omz:update' mode disabled 
+# 禁用魔法函数 (解决粘贴 URL 问题)
+DISABLE_MAGIC_FUNCTIONS=&quot;true&quot;
+
+# 插件加载 (注意：过多插件会拖慢速度，当前保留了你原本的)
+plugins=(git autojump zsh-autosuggestions zsh-syntax-highlighting)
+
+source $ZSH/oh-my-zsh.sh
+
+# [4] 懒加载优化 (Lazy Loading) - 极大提升速度的关键
+# 只有当你输入 jenv 或 java 相关命令时，才会初始化 jenv
+if [ -d &quot;$HOME/.jenv&quot; ]; then
+  export PATH=&quot;$HOME/.jenv/bin:$PATH&quot;
+  function jenv() {
+    unset -f jenv
+    eval &quot;$(jenv init -)&quot;
+    jenv &quot;$@&quot;
+  }
+fi
+
+# 只有当你输入 pyenv 时才初始化 (常规 python 命令走 PATH 即可)
+if command -v pyenv 1&gt;/dev/null 2&gt;&amp;1; then
+  function pyenv() {
+    unset -f pyenv
+    eval &quot;$(pyenv init --path)&quot;
+    eval &quot;$(pyenv init -)&quot;
+    pyenv &quot;$@&quot;
+  }
+fi
+
+# Rust (Cargo) 保持标准加载，速度通常很快
+[[ -f &quot;$HOME/.cargo/env&quot; ]] &amp;&amp; . &quot;$HOME/.cargo/env&quot;
+
+# OrbStack
+[[ -f ~/.orbstack/shell/init.zsh ]] &amp;&amp; source ~/.orbstack/shell/init.zsh 2&gt;/dev/null || :
+
+# [5] P10k 配置文件
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh" dir="auto"><pre class="notranslate"><span class="pl-c"><span class="pl-c">#</span> [1] Powerlevel10k Instant Prompt (必须放在文件最开头)</span>
+<span class="pl-k">if</span> [[ <span class="pl-k">-r</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">${XDG_CACHE_HOME<span class="pl-k">:-</span><span class="pl-smi">$HOME</span><span class="pl-k">/</span>.cache}</span>/p10k-instant-prompt-<span class="pl-smi">${(<span class="pl-k">%</span>)<span class="pl-k">:-%</span>n}</span>.zsh<span class="pl-pds">"</span></span> ]]<span class="pl-k">;</span> <span class="pl-k">then</span>
+  <span class="pl-c1">source</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">${XDG_CACHE_HOME<span class="pl-k">:-</span><span class="pl-smi">$HOME</span><span class="pl-k">/</span>.cache}</span>/p10k-instant-prompt-<span class="pl-smi">${(<span class="pl-k">%</span>)<span class="pl-k">:-%</span>n}</span>.zsh<span class="pl-pds">"</span></span>
+<span class="pl-k">fi</span>
+
+<span class="pl-c"><span class="pl-c">#</span> [2] 基础环境变量与 PATH 优化 (合并所有 PATH 设置)</span>
+<span class="pl-c"><span class="pl-c">#</span> Homebrew (首先加载，确保基础命令可用)</span>
+<span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>/opt/homebrew/bin/brew shellenv<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> 定义路径变量</span>
+<span class="pl-k">export</span> GOPATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/go<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> MAVEN_HOME=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/Java Development/apache-maven-3.8.8<span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> 编译器标志 (OpenSSL)</span>
+<span class="pl-k">export</span> LDFLAGS=<span class="pl-s"><span class="pl-pds">"</span>-L/opt/homebrew/opt/openssl@3/lib<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> CPPFLAGS=<span class="pl-s"><span class="pl-pds">"</span>-I/opt/homebrew/opt/openssl@3/include<span class="pl-pds">"</span></span>
+<span class="pl-k">export</span> PKG_CONFIG_PATH=<span class="pl-s"><span class="pl-pds">"</span>/opt/homebrew/opt/openssl@3/lib/pkgconfig<span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> 批量构建 PATH (注意顺序：自定义 &gt; Homebrew &gt; 系统)</span>
+<span class="pl-c"><span class="pl-c">#</span> 包含: Node@20, OpenJDK@17, Maven, MySQL, Go, LM Studio, Antigravity, User Bins</span>
+path=(
+  <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.local/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span>/opt/homebrew/opt/node@20/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span>/opt/homebrew/opt/openjdk@17/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$MAVEN_HOME</span>/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span>/usr/local/mysql/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$GOPATH</span>/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.pyenv/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.lmstudio/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span>/Users/couture/.antigravity/antigravity/bin<span class="pl-pds">"</span></span>
+  <span class="pl-s"><span class="pl-pds">"</span>/Library/Frameworks/Python.framework/Versions/3.11/bin<span class="pl-pds">"</span></span>
+  <span class="pl-smi">$path</span>
+)
+<span class="pl-k">export</span> PATH
+
+<span class="pl-c"><span class="pl-c">#</span> [3] Oh My Zsh 配置</span>
+<span class="pl-k">export</span> ZSH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.oh-my-zsh<span class="pl-pds">"</span></span>
+ZSH_THEME=<span class="pl-s"><span class="pl-pds">"</span>powerlevel10k/powerlevel10k<span class="pl-pds">"</span></span>
+<span class="pl-c"><span class="pl-c">#</span> 禁用自动更新检查 (提升启动速度)</span>
+zstyle <span class="pl-s"><span class="pl-pds">'</span>:omz:update<span class="pl-pds">'</span></span> mode disabled 
+<span class="pl-c"><span class="pl-c">#</span> 禁用魔法函数 (解决粘贴 URL 问题)</span>
+DISABLE_MAGIC_FUNCTIONS=<span class="pl-s"><span class="pl-pds">"</span>true<span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> 插件加载 (注意：过多插件会拖慢速度，当前保留了你原本的)</span>
+plugins=(git autojump zsh-autosuggestions zsh-syntax-highlighting)
+
+<span class="pl-c1">source</span> <span class="pl-smi">$ZSH</span>/oh-my-zsh.sh
+
+<span class="pl-c"><span class="pl-c">#</span> [4] 懒加载优化 (Lazy Loading) - 极大提升速度的关键</span>
+<span class="pl-c"><span class="pl-c">#</span> 只有当你输入 jenv 或 java 相关命令时，才会初始化 jenv</span>
+<span class="pl-k">if</span> [ <span class="pl-k">-d</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.jenv<span class="pl-pds">"</span></span> ]<span class="pl-k">;</span> <span class="pl-k">then</span>
+  <span class="pl-k">export</span> PATH=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.jenv/bin:<span class="pl-smi">$PATH</span><span class="pl-pds">"</span></span>
+  <span class="pl-k">function</span> <span class="pl-en">jenv()</span> {
+    <span class="pl-c1">unset</span> -f jenv
+    <span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>jenv init -<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+    jenv <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$@</span><span class="pl-pds">"</span></span>
+  }
+<span class="pl-k">fi</span>
+
+<span class="pl-c"><span class="pl-c">#</span> 只有当你输入 pyenv 时才初始化 (常规 python 命令走 PATH 即可)</span>
+<span class="pl-k">if</span> <span class="pl-c1">command</span> -v pyenv <span class="pl-k">1&gt;</span>/dev/null <span class="pl-k">2&gt;&amp;1</span><span class="pl-k">;</span> <span class="pl-k">then</span>
+  <span class="pl-k">function</span> <span class="pl-en">pyenv()</span> {
+    <span class="pl-c1">unset</span> -f pyenv
+    <span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>pyenv init --path<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+    <span class="pl-c1">eval</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>pyenv init -<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+    pyenv <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$@</span><span class="pl-pds">"</span></span>
+  }
+<span class="pl-k">fi</span>
+
+<span class="pl-c"><span class="pl-c">#</span> Rust (Cargo) 保持标准加载，速度通常很快</span>
+[[ <span class="pl-k">-f</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.cargo/env<span class="pl-pds">"</span></span> ]] <span class="pl-k">&amp;&amp;</span> <span class="pl-c1">.</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$HOME</span>/.cargo/env<span class="pl-pds">"</span></span>
+
+<span class="pl-c"><span class="pl-c">#</span> OrbStack</span>
+[[ <span class="pl-k">-f</span> <span class="pl-k">~</span>/.orbstack/shell/init.zsh ]] <span class="pl-k">&amp;&amp;</span> <span class="pl-c1">source</span> <span class="pl-k">~</span>/.orbstack/shell/init.zsh <span class="pl-k">2&gt;</span>/dev/null <span class="pl-k">||</span> <span class="pl-c1">:</span>
+
+<span class="pl-c"><span class="pl-c">#</span> [5] P10k 配置文件</span>
+[[ <span class="pl-k">!</span> <span class="pl-k">-f</span> <span class="pl-k">~</span>/.p10k.zsh ]] <span class="pl-k">||</span> <span class="pl-c1">source</span> <span class="pl-k">~</span>/.p10k.zsh</pre></div>
+<p dir="auto"> 现在打开终端以后打开的速度瞬间打开，启用优化后的环境变量以后，用<code class="notranslate">source</code>命令进行刷新，如果对AI不放心我采取的是给自己原来配置的环境变量进行备份。</p></div><div class="labels"><a href="https://github.com/xcouturecc/gitblog/labels/%E6%8A%80%E6%9C%AF">#技术</a></div></article><section id="comments" data-issue="29" aria-label="评论"><div class="comments-actions"><a class="button" href="https://github.com/xcouturecc/gitblog/issues/29#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a></div><div class="comments-list" aria-live="polite"></div></section><footer id="footer">© 2026 Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/xcouturecc/gitblog/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+</body></html>

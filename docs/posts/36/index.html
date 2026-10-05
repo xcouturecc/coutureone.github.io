@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Garmin网页批量删除活动 - Couture&#x27;s Blog</title><meta name="description" content="在浏览器控制台里面粘贴进去，前提是已经登录好了connect网页版本。 // v0.30 2025-11-18 (China CN Version Modified) ( function ( ) { &#x27;use strict&#x27; ; window . connectActivities = function ( devi">
+<link rel="canonical" href="https://blog.xcouture.cc/posts/36/"><meta property="og:title" content="Garmin网页批量删除活动 - Couture&#x27;s Blog"><meta property="og:url" content="https://blog.xcouture.cc/posts/36/"><meta property="og:type" content="article"><meta property="article:published_time" content="2026-03-31T13:04:26Z">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
+<script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/base.css"><link rel="stylesheet" href="/assets/theme.css">
+<script src="/assets/runtime.js" defer></script></head><body>
+<button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
+<main class="page"><div><article id="post"><a class="back" href="/" aria-label="返回"><svg xmlns="http://www.w3.org/2000/svg" class="icon" version="1" viewBox="0 0 1024 1024"><path d="M774 467H415l110-108c18-18 18-48 0-66a48 48 0 0 0-67 0L273 475a47 47 0 0 0-11 11 45 45 0 0 0 13 66l183 180c19 18 48 18 67 0 18-18 18-47 0-65L415 559h359c26 0 48-21 48-46s-22-46-48-46zm0 0"/><path d="M512 93a419 419 0 1 1 0 838 419 419 0 0 1 0-838m0-93A509 509 0 0 0 0 512a509 509 0 0 0 512 512 509 509 0 0 0 512-512A509 509 0 0 0 512 0z"/></svg></a><h1>Garmin网页批量删除活动</h1><p>Updated at<span>Mar 31, 2026</span></p><div class="markdown-body"><p dir="auto"> 在浏览器控制台里面粘贴进去，前提是已经登录好了connect网页版本。</p>
+<div class="highlight highlight-source-js notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="// v0.30 2025-11-18 (China CN Version Modified)
+(function() {
+    'use strict';
+
+    window.connectActivities = function(deviceArg, operationArg) {
+        window.localStorage.removeItem(&quot;_connect_activities_cancel&quot;);
+
+        class ShowUsageError extends Error { constructor(message) { super(message); this.name = this.constructor.name; } }
+        class CancellationError extends Error { constructor(message) { super(message); this.name = this.constructor.name; } }
+
+        function replaceAll(str, find, replace) { return str.replace(new RegExp(find, 'g'), replace); }
+
+        var virtualConsole = {
+            lines: [], currentLine: 0, subs: {},
+            setSub: function(key, value) { virtualConsole.subs[key] = value; },
+            log: function (msg, appendToCurrentLine) {
+                if (!appendToCurrentLine) virtualConsole.currentLine++;
+                if (appendToCurrentLine &amp;&amp; virtualConsole.lines[virtualConsole.currentLine]) {
+                    virtualConsole.lines[virtualConsole.currentLine] += msg;
+                } else {
+                    virtualConsole.lines[virtualConsole.currentLine] = msg;
+                }
+                console.clear();
+                virtualConsole.lines.forEach(function (line) {
+                    for (const key in virtualConsole.subs) { line = replaceAll(line, key, virtualConsole.subs[key]); }
+                    console.log(line);
+                });
+            }
+        }
+
+        async function fetchRequest(description, url, method, data, requestIsJson) {
+            // 自动转换域名为国服 .cn
+            url = url.replace('garmin.com', 'garmin.cn');
+            
+            const shouldCancel = window.localStorage.getItem(&quot;_connect_activities_cancel&quot;);
+            if (shouldCancel) { throw new CancellationError('cancelled by user'); }
+
+            const headers = new Headers();
+            const token = document.querySelector('meta[name=&quot;csrf-token&quot;]')
+            if (token) {
+                let csrf_token = token.content;
+                url = url.replace(&quot;connect.garmin.cn/&quot;, &quot;connect.garmin.cn/gc-api/&quot;);
+                headers.append('connect-csrf-token', csrf_token);
+            } else {
+                let access_token;
+                try {
+                    const tokenStorage = window.localStorage.getItem(&quot;token&quot;);
+                    access_token = JSON.parse(tokenStorage).access_token;
+                } catch (e) { throw new Error(`请确保已登录佳明官网。`); }
+                headers.append(&quot;Authorization&quot;, `Bearer ${access_token}`);
+            }
+
+            if (requestIsJson) { headers.append(&quot;Content-Type&quot;, &quot;application/json&quot;); }
+            headers.append(&quot;NK&quot;, &quot;NT&quot;);
+            headers.append(&quot;Di-Backend&quot;, &quot;connectapi.garmin.cn&quot;);
+
+            let response = await fetch(url, { method: method || 'GET', headers: headers, body: data || null });
+            if (!response.ok) { throw new Error(`${description} 失败: ${response.status}`); }
+            return response;
+        }
+
+        const maxLimit = 10000;
+        let operation = undefined;
+        const options = { limit: maxLimit, device: undefined, ignoreMissingDevices: false, name: undefined, at: undefined, after: undefined, before: undefined, startingAt: undefined, endingAt: undefined, type: undefined, newType: undefined };
+
+        async function main() {
+            // 解析参数逻辑
+            if (typeof operationArg === &quot;string&quot;) {
+                options.device = deviceArg; operation = operationArg;
+            } else if (typeof deviceArg === &quot;string&quot;) {
+                operation = deviceArg;
+                if (typeof operationArg === 'object') Object.assign(options, operationArg);
+            }
+
+            // 核心检查点：已修改为适配国服域名
+            if (!window.location.href.includes('garmin.cn') &amp;&amp; !window.location.href.includes('garmin.com')) {
+                throw new Error('脚本必须在佳明官网运行');
+            }
+
+            console.log(&quot;⏳ 正在获取活动列表...&quot;);
+            const activityListUrl = `https://connect.garmin.cn/activitylist-service/activities/search/activities?limit=${options.limit}&amp;start=0`;
+            const activities = await (await fetchRequest('获取活动列表', activityListUrl)).json();
+
+            if (activities.length === 0) { console.log('未找到活动'); return; }
+
+            const filteredActivities = activities.filter(activity =&gt; {
+                const activityDate = activity.startTimeLocal.substring(0, 10);
+                if (options.before &amp;&amp; activityDate &gt;= options.before) return false;
+                return true;
+            });
+
+            console.log(`符合筛选条件的活动数量: ${filteredActivities.length}`);
+
+            for (const a of filteredActivities) {
+                console.log(`• 📅 ${a.startTimeLocal} | ID: ${a.activityId} | 链接: https://connect.garmin.cn/modern/activity/${a.activityId}`);
+                if (operation === 'delete') {
+                    if (confirm(`确定要删除活动 ${a.activityId} 吗？`)) {
+                        await fetchRequest('删除活动', `https://connect.garmin.cn/activity-service/activity/${a.activityId}`, 'DELETE');
+                        console.log(`✅ 已删除: ${a.activityId}`);
+                    }
+                }
+            }
+        }
+
+        main().catch(e =&gt; console.error(e));
+    };
+
+    console.log(&quot;%c✅ 佳明国服专用版脚本加载完毕！&quot;, &quot;color: #32CD32; font-size: 16px; font-weight: bold;&quot;);
+    console.log(&quot;使用示例: connectActivities('show', { before: '2026-01-01' });&quot;);
+})();" dir="auto"><pre class="notranslate"><span class="pl-c">// v0.30 2025-11-18 (China CN Version Modified)</span>
+<span class="pl-kos">(</span><span class="pl-k">function</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+    <span class="pl-s">'use strict'</span><span class="pl-kos">;</span>
+
+    <span class="pl-smi">window</span><span class="pl-kos">.</span><span class="pl-en">connectActivities</span> <span class="pl-c1">=</span> <span class="pl-k">function</span><span class="pl-kos">(</span><span class="pl-s1">deviceArg</span><span class="pl-kos">,</span> <span class="pl-s1">operationArg</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+        <span class="pl-smi">window</span><span class="pl-kos">.</span><span class="pl-c1">localStorage</span><span class="pl-kos">.</span><span class="pl-en">removeItem</span><span class="pl-kos">(</span><span class="pl-s">"_connect_activities_cancel"</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+        <span class="pl-k">class</span> <span class="pl-v">ShowUsageError</span> <span class="pl-k">extends</span> <span class="pl-v">Error</span> <span class="pl-kos">{</span> <span class="pl-en">constructor</span><span class="pl-kos">(</span><span class="pl-s1">message</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-smi">super</span><span class="pl-kos">(</span><span class="pl-s1">message</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">=</span> <span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-c1">constructor</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">;</span> <span class="pl-kos">}</span> <span class="pl-kos">}</span>
+        <span class="pl-k">class</span> <span class="pl-v">CancellationError</span> <span class="pl-k">extends</span> <span class="pl-v">Error</span> <span class="pl-kos">{</span> <span class="pl-en">constructor</span><span class="pl-kos">(</span><span class="pl-s1">message</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-smi">super</span><span class="pl-kos">(</span><span class="pl-s1">message</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-c1">name</span> <span class="pl-c1">=</span> <span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-c1">constructor</span><span class="pl-kos">.</span><span class="pl-c1">name</span><span class="pl-kos">;</span> <span class="pl-kos">}</span> <span class="pl-kos">}</span>
+
+        <span class="pl-k">function</span> <span class="pl-en">replaceAll</span><span class="pl-kos">(</span><span class="pl-s1">str</span><span class="pl-kos">,</span> <span class="pl-s1">find</span><span class="pl-kos">,</span> <span class="pl-s1">replace</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-k">return</span> <span class="pl-s1">str</span><span class="pl-kos">.</span><span class="pl-en">replace</span><span class="pl-kos">(</span><span class="pl-k">new</span> <span class="pl-v">RegExp</span><span class="pl-kos">(</span><span class="pl-s1">find</span><span class="pl-kos">,</span> <span class="pl-s">'g'</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-s1">replace</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-kos">}</span>
+
+        <span class="pl-k">var</span> <span class="pl-s1">virtualConsole</span> <span class="pl-c1">=</span> <span class="pl-kos">{</span>
+            <span class="pl-c1">lines</span>: <span class="pl-kos">[</span><span class="pl-kos">]</span><span class="pl-kos">,</span> <span class="pl-c1">currentLine</span>: <span class="pl-c1">0</span><span class="pl-kos">,</span> <span class="pl-c1">subs</span>: <span class="pl-kos">{</span><span class="pl-kos">}</span><span class="pl-kos">,</span>
+            <span class="pl-en">setSub</span>: <span class="pl-k">function</span><span class="pl-kos">(</span><span class="pl-s1">key</span><span class="pl-kos">,</span> <span class="pl-s1">value</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">subs</span><span class="pl-kos">[</span><span class="pl-s1">key</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-s1">value</span><span class="pl-kos">;</span> <span class="pl-kos">}</span><span class="pl-kos">,</span>
+            <span class="pl-en">log</span>: <span class="pl-k">function</span> <span class="pl-kos">(</span><span class="pl-s1">msg</span><span class="pl-kos">,</span> <span class="pl-s1">appendToCurrentLine</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-c1">!</span><span class="pl-s1">appendToCurrentLine</span><span class="pl-kos">)</span> <span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">currentLine</span><span class="pl-c1">++</span><span class="pl-kos">;</span>
+                <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">appendToCurrentLine</span> <span class="pl-c1">&amp;&amp;</span> <span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">lines</span><span class="pl-kos">[</span><span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">currentLine</span><span class="pl-kos">]</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                    <span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">lines</span><span class="pl-kos">[</span><span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">currentLine</span><span class="pl-kos">]</span> <span class="pl-c1">+=</span> <span class="pl-s1">msg</span><span class="pl-kos">;</span>
+                <span class="pl-kos">}</span> <span class="pl-k">else</span> <span class="pl-kos">{</span>
+                    <span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">lines</span><span class="pl-kos">[</span><span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">currentLine</span><span class="pl-kos">]</span> <span class="pl-c1">=</span> <span class="pl-s1">msg</span><span class="pl-kos">;</span>
+                <span class="pl-kos">}</span>
+                <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">clear</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+                <span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">lines</span><span class="pl-kos">.</span><span class="pl-en">forEach</span><span class="pl-kos">(</span><span class="pl-k">function</span> <span class="pl-kos">(</span><span class="pl-s1">line</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                    <span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">key</span> <span class="pl-k">in</span> <span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">subs</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-s1">line</span> <span class="pl-c1">=</span> <span class="pl-en">replaceAll</span><span class="pl-kos">(</span><span class="pl-s1">line</span><span class="pl-kos">,</span> <span class="pl-s1">key</span><span class="pl-kos">,</span> <span class="pl-s1">virtualConsole</span><span class="pl-kos">.</span><span class="pl-c1">subs</span><span class="pl-kos">[</span><span class="pl-s1">key</span><span class="pl-kos">]</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-kos">}</span>
+                    <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s1">line</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+                <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-kos">}</span>
+        <span class="pl-kos">}</span>
+
+        <span class="pl-k">async</span> <span class="pl-k">function</span> <span class="pl-en">fetchRequest</span><span class="pl-kos">(</span><span class="pl-s1">description</span><span class="pl-kos">,</span> <span class="pl-s1">url</span><span class="pl-kos">,</span> <span class="pl-s1">method</span><span class="pl-kos">,</span> <span class="pl-s1">data</span><span class="pl-kos">,</span> <span class="pl-s1">requestIsJson</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+            <span class="pl-c">// 自动转换域名为国服 .cn</span>
+            <span class="pl-s1">url</span> <span class="pl-c1">=</span> <span class="pl-s1">url</span><span class="pl-kos">.</span><span class="pl-en">replace</span><span class="pl-kos">(</span><span class="pl-s">'garmin.com'</span><span class="pl-kos">,</span> <span class="pl-s">'garmin.cn'</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            
+            <span class="pl-k">const</span> <span class="pl-s1">shouldCancel</span> <span class="pl-c1">=</span> <span class="pl-smi">window</span><span class="pl-kos">.</span><span class="pl-c1">localStorage</span><span class="pl-kos">.</span><span class="pl-en">getItem</span><span class="pl-kos">(</span><span class="pl-s">"_connect_activities_cancel"</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">shouldCancel</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-k">throw</span> <span class="pl-k">new</span> <span class="pl-v">CancellationError</span><span class="pl-kos">(</span><span class="pl-s">'cancelled by user'</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-kos">}</span>
+
+            <span class="pl-k">const</span> <span class="pl-s1">headers</span> <span class="pl-c1">=</span> <span class="pl-k">new</span> <span class="pl-v">Headers</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-k">const</span> <span class="pl-s1">token</span> <span class="pl-c1">=</span> <span class="pl-smi">document</span><span class="pl-kos">.</span><span class="pl-en">querySelector</span><span class="pl-kos">(</span><span class="pl-s">'meta[name="csrf-token"]'</span><span class="pl-kos">)</span>
+            <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">token</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                <span class="pl-k">let</span> <span class="pl-s1">csrf_token</span> <span class="pl-c1">=</span> <span class="pl-s1">token</span><span class="pl-kos">.</span><span class="pl-c1">content</span><span class="pl-kos">;</span>
+                <span class="pl-s1">url</span> <span class="pl-c1">=</span> <span class="pl-s1">url</span><span class="pl-kos">.</span><span class="pl-en">replace</span><span class="pl-kos">(</span><span class="pl-s">"connect.garmin.cn/"</span><span class="pl-kos">,</span> <span class="pl-s">"connect.garmin.cn/gc-api/"</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+                <span class="pl-s1">headers</span><span class="pl-kos">.</span><span class="pl-en">append</span><span class="pl-kos">(</span><span class="pl-s">'connect-csrf-token'</span><span class="pl-kos">,</span> <span class="pl-s1">csrf_token</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-kos">}</span> <span class="pl-k">else</span> <span class="pl-kos">{</span>
+                <span class="pl-k">let</span> <span class="pl-s1">access_token</span><span class="pl-kos">;</span>
+                <span class="pl-k">try</span> <span class="pl-kos">{</span>
+                    <span class="pl-k">const</span> <span class="pl-s1">tokenStorage</span> <span class="pl-c1">=</span> <span class="pl-smi">window</span><span class="pl-kos">.</span><span class="pl-c1">localStorage</span><span class="pl-kos">.</span><span class="pl-en">getItem</span><span class="pl-kos">(</span><span class="pl-s">"token"</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+                    <span class="pl-s1">access_token</span> <span class="pl-c1">=</span> <span class="pl-c1">JSON</span><span class="pl-kos">.</span><span class="pl-en">parse</span><span class="pl-kos">(</span><span class="pl-s1">tokenStorage</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-c1">access_token</span><span class="pl-kos">;</span>
+                <span class="pl-kos">}</span> <span class="pl-k">catch</span> <span class="pl-kos">(</span><span class="pl-s1">e</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-k">throw</span> <span class="pl-k">new</span> <span class="pl-v">Error</span><span class="pl-kos">(</span><span class="pl-s">`请确保已登录佳明官网。`</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-kos">}</span>
+                <span class="pl-s1">headers</span><span class="pl-kos">.</span><span class="pl-en">append</span><span class="pl-kos">(</span><span class="pl-s">"Authorization"</span><span class="pl-kos">,</span> <span class="pl-s">`Bearer <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">access_token</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-kos">}</span>
+
+            <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">requestIsJson</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-s1">headers</span><span class="pl-kos">.</span><span class="pl-en">append</span><span class="pl-kos">(</span><span class="pl-s">"Content-Type"</span><span class="pl-kos">,</span> <span class="pl-s">"application/json"</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-kos">}</span>
+            <span class="pl-s1">headers</span><span class="pl-kos">.</span><span class="pl-en">append</span><span class="pl-kos">(</span><span class="pl-s">"NK"</span><span class="pl-kos">,</span> <span class="pl-s">"NT"</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-s1">headers</span><span class="pl-kos">.</span><span class="pl-en">append</span><span class="pl-kos">(</span><span class="pl-s">"Di-Backend"</span><span class="pl-kos">,</span> <span class="pl-s">"connectapi.garmin.cn"</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+            <span class="pl-k">let</span> <span class="pl-s1">response</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-en">fetch</span><span class="pl-kos">(</span><span class="pl-s1">url</span><span class="pl-kos">,</span> <span class="pl-kos">{</span> <span class="pl-c1">method</span>: <span class="pl-s1">method</span> <span class="pl-c1">||</span> <span class="pl-s">'GET'</span><span class="pl-kos">,</span> <span class="pl-c1">headers</span>: <span class="pl-s1">headers</span><span class="pl-kos">,</span> <span class="pl-c1">body</span>: <span class="pl-s1">data</span> <span class="pl-c1">||</span> <span class="pl-c1">null</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-c1">!</span><span class="pl-s1">response</span><span class="pl-kos">.</span><span class="pl-c1">ok</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-k">throw</span> <span class="pl-k">new</span> <span class="pl-v">Error</span><span class="pl-kos">(</span><span class="pl-s">`<span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">description</span><span class="pl-kos">}</span></span> 失败: <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">response</span><span class="pl-kos">.</span><span class="pl-c1">status</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-kos">}</span>
+            <span class="pl-k">return</span> <span class="pl-s1">response</span><span class="pl-kos">;</span>
+        <span class="pl-kos">}</span>
+
+        <span class="pl-k">const</span> <span class="pl-s1">maxLimit</span> <span class="pl-c1">=</span> <span class="pl-c1">10000</span><span class="pl-kos">;</span>
+        <span class="pl-k">let</span> <span class="pl-s1">operation</span> <span class="pl-c1">=</span> <span class="pl-c1">undefined</span><span class="pl-kos">;</span>
+        <span class="pl-k">const</span> <span class="pl-s1">options</span> <span class="pl-c1">=</span> <span class="pl-kos">{</span> <span class="pl-c1">limit</span>: <span class="pl-s1">maxLimit</span><span class="pl-kos">,</span> <span class="pl-c1">device</span>: <span class="pl-c1">undefined</span><span class="pl-kos">,</span> <span class="pl-c1">ignoreMissingDevices</span>: <span class="pl-c1">false</span><span class="pl-kos">,</span> <span class="pl-c1">name</span>: <span class="pl-c1">undefined</span><span class="pl-kos">,</span> <span class="pl-c1">at</span>: <span class="pl-c1">undefined</span><span class="pl-kos">,</span> <span class="pl-c1">after</span>: <span class="pl-c1">undefined</span><span class="pl-kos">,</span> <span class="pl-c1">before</span>: <span class="pl-c1">undefined</span><span class="pl-kos">,</span> <span class="pl-c1">startingAt</span>: <span class="pl-c1">undefined</span><span class="pl-kos">,</span> <span class="pl-c1">endingAt</span>: <span class="pl-c1">undefined</span><span class="pl-kos">,</span> <span class="pl-c1">type</span>: <span class="pl-c1">undefined</span><span class="pl-kos">,</span> <span class="pl-c1">newType</span>: <span class="pl-c1">undefined</span> <span class="pl-kos">}</span><span class="pl-kos">;</span>
+
+        <span class="pl-k">async</span> <span class="pl-k">function</span> <span class="pl-en">main</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+            <span class="pl-c">// 解析参数逻辑</span>
+            <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-k">typeof</span> <span class="pl-s1">operationArg</span> <span class="pl-c1">===</span> <span class="pl-s">"string"</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                <span class="pl-s1">options</span><span class="pl-kos">.</span><span class="pl-c1">device</span> <span class="pl-c1">=</span> <span class="pl-s1">deviceArg</span><span class="pl-kos">;</span> <span class="pl-s1">operation</span> <span class="pl-c1">=</span> <span class="pl-s1">operationArg</span><span class="pl-kos">;</span>
+            <span class="pl-kos">}</span> <span class="pl-k">else</span> <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-k">typeof</span> <span class="pl-s1">deviceArg</span> <span class="pl-c1">===</span> <span class="pl-s">"string"</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                <span class="pl-s1">operation</span> <span class="pl-c1">=</span> <span class="pl-s1">deviceArg</span><span class="pl-kos">;</span>
+                <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-k">typeof</span> <span class="pl-s1">operationArg</span> <span class="pl-c1">===</span> <span class="pl-s">'object'</span><span class="pl-kos">)</span> <span class="pl-v">Object</span><span class="pl-kos">.</span><span class="pl-en">assign</span><span class="pl-kos">(</span><span class="pl-s1">options</span><span class="pl-kos">,</span> <span class="pl-s1">operationArg</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-kos">}</span>
+
+            <span class="pl-c">// 核心检查点：已修改为适配国服域名</span>
+            <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-c1">!</span><span class="pl-smi">window</span><span class="pl-kos">.</span><span class="pl-c1">location</span><span class="pl-kos">.</span><span class="pl-c1">href</span><span class="pl-kos">.</span><span class="pl-en">includes</span><span class="pl-kos">(</span><span class="pl-s">'garmin.cn'</span><span class="pl-kos">)</span> <span class="pl-c1">&amp;&amp;</span> <span class="pl-c1">!</span><span class="pl-smi">window</span><span class="pl-kos">.</span><span class="pl-c1">location</span><span class="pl-kos">.</span><span class="pl-c1">href</span><span class="pl-kos">.</span><span class="pl-en">includes</span><span class="pl-kos">(</span><span class="pl-s">'garmin.com'</span><span class="pl-kos">)</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                <span class="pl-k">throw</span> <span class="pl-k">new</span> <span class="pl-v">Error</span><span class="pl-kos">(</span><span class="pl-s">'脚本必须在佳明官网运行'</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-kos">}</span>
+
+            <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s">"⏳ 正在获取活动列表..."</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+            <span class="pl-k">const</span> <span class="pl-s1">activityListUrl</span> <span class="pl-c1">=</span> <span class="pl-s">`https://connect.garmin.cn/activitylist-service/activities/search/activities?limit=<span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">options</span><span class="pl-kos">.</span><span class="pl-c1">limit</span><span class="pl-kos">}</span></span>&amp;start=0`</span><span class="pl-kos">;</span>
+            <span class="pl-k">const</span> <span class="pl-s1">activities</span> <span class="pl-c1">=</span> <span class="pl-k">await</span> <span class="pl-kos">(</span><span class="pl-k">await</span> <span class="pl-en">fetchRequest</span><span class="pl-kos">(</span><span class="pl-s">'获取活动列表'</span><span class="pl-kos">,</span> <span class="pl-s1">activityListUrl</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">json</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+            <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">activities</span><span class="pl-kos">.</span><span class="pl-c1">length</span> <span class="pl-c1">===</span> <span class="pl-c1">0</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s">'未找到活动'</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-k">return</span><span class="pl-kos">;</span> <span class="pl-kos">}</span>
+
+            <span class="pl-k">const</span> <span class="pl-s1">filteredActivities</span> <span class="pl-c1">=</span> <span class="pl-s1">activities</span><span class="pl-kos">.</span><span class="pl-en">filter</span><span class="pl-kos">(</span><span class="pl-s1">activity</span> <span class="pl-c1">=&gt;</span> <span class="pl-kos">{</span>
+                <span class="pl-k">const</span> <span class="pl-s1">activityDate</span> <span class="pl-c1">=</span> <span class="pl-s1">activity</span><span class="pl-kos">.</span><span class="pl-c1">startTimeLocal</span><span class="pl-kos">.</span><span class="pl-en">substring</span><span class="pl-kos">(</span><span class="pl-c1">0</span><span class="pl-kos">,</span> <span class="pl-c1">10</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+                <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">options</span><span class="pl-kos">.</span><span class="pl-c1">before</span> <span class="pl-c1">&amp;&amp;</span> <span class="pl-s1">activityDate</span> <span class="pl-c1">&gt;=</span> <span class="pl-s1">options</span><span class="pl-kos">.</span><span class="pl-c1">before</span><span class="pl-kos">)</span> <span class="pl-k">return</span> <span class="pl-c1">false</span><span class="pl-kos">;</span>
+                <span class="pl-k">return</span> <span class="pl-c1">true</span><span class="pl-kos">;</span>
+            <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+            <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s">`符合筛选条件的活动数量: <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">filteredActivities</span><span class="pl-kos">.</span><span class="pl-c1">length</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+
+            <span class="pl-k">for</span> <span class="pl-kos">(</span><span class="pl-k">const</span> <span class="pl-s1">a</span> <span class="pl-k">of</span> <span class="pl-s1">filteredActivities</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s">`• 📅 <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">a</span><span class="pl-kos">.</span><span class="pl-c1">startTimeLocal</span><span class="pl-kos">}</span></span> | ID: <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">a</span><span class="pl-kos">.</span><span class="pl-c1">activityId</span><span class="pl-kos">}</span></span> | 链接: https://connect.garmin.cn/modern/activity/<span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">a</span><span class="pl-kos">.</span><span class="pl-c1">activityId</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+                <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-s1">operation</span> <span class="pl-c1">===</span> <span class="pl-s">'delete'</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                    <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-en">confirm</span><span class="pl-kos">(</span><span class="pl-s">`确定要删除活动 <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">a</span><span class="pl-kos">.</span><span class="pl-c1">activityId</span><span class="pl-kos">}</span></span> 吗？`</span><span class="pl-kos">)</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+                        <span class="pl-k">await</span> <span class="pl-en">fetchRequest</span><span class="pl-kos">(</span><span class="pl-s">'删除活动'</span><span class="pl-kos">,</span> <span class="pl-s">`https://connect.garmin.cn/activity-service/activity/<span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">a</span><span class="pl-kos">.</span><span class="pl-c1">activityId</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">,</span> <span class="pl-s">'DELETE'</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+                        <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s">`✅ 已删除: <span class="pl-s1"><span class="pl-kos">${</span><span class="pl-s1">a</span><span class="pl-kos">.</span><span class="pl-c1">activityId</span><span class="pl-kos">}</span></span>`</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+                    <span class="pl-kos">}</span>
+                <span class="pl-kos">}</span>
+            <span class="pl-kos">}</span>
+        <span class="pl-kos">}</span>
+
+        <span class="pl-en">main</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">catch</span><span class="pl-kos">(</span><span class="pl-s1">e</span> <span class="pl-c1">=&gt;</span> <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">error</span><span class="pl-kos">(</span><span class="pl-s1">e</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+    <span class="pl-kos">}</span><span class="pl-kos">;</span>
+
+    <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s">"%c✅ 佳明国服专用版脚本加载完毕！"</span><span class="pl-kos">,</span> <span class="pl-s">"color: #32CD32; font-size: 16px; font-weight: bold;"</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+    <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s">"使用示例: connectActivities('show', { before: '2026-01-01' });"</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<div class="highlight highlight-source-js notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="window.confirm = function() { return true; }; // 自动确认删除" dir="auto"><pre class="notranslate"><span class="pl-smi">window</span><span class="pl-kos">.</span><span class="pl-en">confirm</span> <span class="pl-c1">=</span> <span class="pl-k">function</span><span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">{</span> <span class="pl-k">return</span> <span class="pl-c1">true</span><span class="pl-kos">;</span> <span class="pl-kos">}</span><span class="pl-kos">;</span> <span class="pl-c">// 自动确认删除</span></pre></div>
+<div class="highlight highlight-source-js notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content='connectActivities("delete", { before: "2026-01-29" }); // 示例 2026年1月29日年之前的数据' dir="auto"><pre class="notranslate"><span class="pl-en">connectActivities</span><span class="pl-kos">(</span><span class="pl-s">"delete"</span><span class="pl-kos">,</span> <span class="pl-kos">{</span> <span class="pl-c1">before</span>: <span class="pl-s">"2026-01-29"</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span> <span class="pl-c">// 示例 2026年1月29日年之前的数据</span></pre></div></div><div class="labels"><a href="https://github.com/xcouturecc/gitblog/labels/%E6%9D%82%E8%AE%B0">#杂记</a></div></article><section id="comments" data-issue="36" aria-label="评论"><div class="comments-actions"><a class="button" href="https://github.com/xcouturecc/gitblog/issues/36#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a></div><div class="comments-list" aria-live="polite"></div></section><footer id="footer">© 2026 Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/xcouturecc/gitblog/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+</body></html>

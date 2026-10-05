@@ -1,0 +1,1285 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns="http://www.w3.org/2005/Atom"><id>https://blog.xcouture.cc</id><title>Couture's Blog</title><updated>2026-09-28T14:33:23+00:00</updated><link href="https://blog.xcouture.cc"/><link href="https://raw.githubusercontent.com/xcouturecc/gitblog/master/feed.xml" rel="self"/><generator uri="https://lkiesow.github.io/python-feedgen" version="1.0.0">python-feedgen</generator><entry><id>https://blog.xcouture.cc/posts/53/</id><title>ChatGPT接入中国Garmin</title><updated>2026-09-28T14:33:23+00:00</updated><content type="html"><![CDATA[<p> 我原本考虑把佳明账号换成国际区，想让训练数据更方便地进入 AI 助手。但了解之后发现，换区未必能解决我遇到的接入限制。最后，我保留了 Garmin Connect 中国区账号，借助开源项目 借助开源项目 <a href="https://github.com/Taxuspt/garmin_mcp">Garmin MCP Server</a>，搭建了一条适合自己使用的链路。</p>
+<p> 现在，我可以在 Codex 桌面端直接询问最近的跑步、睡眠和恢复情况；软路由也会定时取数，生成训练日报并通过 Bark 推送到手机。这里的“接入 ChatGPT”，具体落地在支持 MCP 的 Codex 客户端和我自己写的日报程序中。</p>
+<h2>整体架构</h2>
+<pre><code class="language-text">Garmin Connect 中国区
+        ↓
+软路由 10.10.1。1 上的 garmin-mcp-cn 容器
+        ↓ 软路由本机仅监听 127.0.0.1:18765
+        ├─ Mac 的 SSH 隧道 → Codex 里的 garmin_cn 工具
+        └─ 软路由定时脚本 → AI 训练日报 → Bark 手机推送
+</code></pre>
+<p> 这套方案的核心是让 MCP 服务负责读取佳明数据，让 AI 客户端和定时程序分别消费这些数据。Garmin MCP Server 使用 <code>python-garminconnect</code> 访问 Garmin Connect，并把活动、睡眠、心率、HRV、训练状态等能力封装成 MCP 工具。</p>
+<h2>第一步：在软路由运行 Garmin MCP</h2>
+<p> 我把服务部署在软路由的 Docker 容器中，镜像名为 <code>garmin-mcp-cn:local</code>。容器配置了 <code>GARMIN_IS_CN=true</code>，对应 Garmin Connect 中国区；传输方式是 <code>streamable-http</code>。服务在容器内监听 8000 端口，映射到软路由的 <code>127.0.0.1:18765</code>。</p>
+<p> 佳明登录令牌保存在软路由的持久化目录，并挂载到容器中。这样服务重启后还能继续使用已有令牌，也无需把账号密码写进 Codex 的 MCP 配置。容器还通过 <code>GARMIN_ENABLED_TOOLS</code> 只开放当前需要的查询工具。</p>
+<p> 我特意让端口只绑定在软路由的回环地址。这个 HTTP MCP 服务本身没有额外的访问认证，因此不适合直接暴露到局域网或公网；远程访问由 SSH 隧道承担。</p>
+<h2>第二步：用 SSH 隧道连接 Mac 和软路由</h2>
+<p> Mac 上运行一个由 <code>launchd</code> 管理的常驻 SSH 端口转发：</p>
+<pre><code class="language-bash">ssh -N -L 127.0.0.1:18765:127.0.0.1:18765 root@10.10.1.1
+</code></pre>
+<p> 这样，Mac 访问本机的 <code>127.0.0.1:18765</code>，请求就会通过 SSH 转到软路由上的 Garmin MCP。隧道设置为登录后启动，并在连接中断后自动重启。</p>
+<p>Codex 的配置很简单：</p>
+<pre><code class="language-toml">[mcp_servers.garmin_cn]
+url = &quot;http://127.0.0.1:18765/mcp&quot;
+</code></pre>
+<p> 接通后，Codex 中就能看到 <code>garmin_cn</code> 提供的工具。我可以直接问“最近一周跑量比上一周增加了多少”“昨晚睡眠和 HRV 怎么样”，AI 会调用相应工具取数，再结合问题进行解释。</p>
+<h2>第三步：让数据每天主动来找我</h2>
+<p> 除了对话查询，我还写了一个每日训练日报程序。软路由定时启动脚本，向同一个本地 MCP 服务查询最近 30 天的活动、最近 7 天的睡眠和 HRV，以及当天的训练准备度、训练状态、心率和身体电量。</p>
+<p> 程序先把原始结果压缩成跑量、近期训练和恢复指标摘要，再交给模型生成中文建议，最后由 Bark 推送到手机。日报会比较近 7 天与前 7 天的跑量，给出当天一项明确的训练或休息安排；如果模型接口不可用，程序会生成一份保守的降级报告。</p>
+<p> 定时任务在早上 8:00 至 9:45，每隔 15 分钟留一次运行机会，同时用锁和当日发送标记避免重复推送。手表数据可能尚未同步，所以日报不会把“暂时查不到活动”直接理解成“今天没有运动”。</p>
+<p> 对我来说，最大的变化是佳明数据终于能进入日常工作流：想分析时，在 Codex 里直接问；不想主动打开应用时，早上的训练日报会自己送到手机。感谢 [Garmin MCP Server 的开源作者和贡献者]借助开源项目 <a href="https://github.com/Taxuspt/garmin_mcp">Garmin MCP Server</a>，让我可以在保留中国区账号的前提下，把这些数据真正用起来。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/53/"/><category term="杂记"/><category term="running"/><published>2026-09-28T14:33:23+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/52/</id><title>解决Excel加载项</title><updated>2026-09-11T04:22:53+00:00</updated><content type="html"><![CDATA[<h1>解决Excel加载项</h1>
+<p>关于解决<code>Office</code>在<code>Mac</code>上面打开文件报错，解决方式：</p>
+<p>工具-&gt;Excel-&gt;加载项</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@master/img/IMG_2902.png" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@master/img/image-20260911121325812.png" alt="" /></p>
+<p>去掉以后问题解决了，不会在报错了。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/52/"/><category term="杂记"/><published>2026-09-11T04:22:53+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/51/</id><title>1000KM</title><updated>2026-08-22T16:18:40+00:00</updated><content type="html"><![CDATA[<p> 今天跑完以后，我像往常一样停下手表，结束，保存，年初定下的目标1000公里，今天实现了。这也是我跑步以来，第一次一年时间跑了这么多公里的路程。我很开心。但真正让我感慨的，并不是“一千公里”本身，而是它背后那些普通得几乎不会被记住的日子。</p>
+<h2>一千公里，是许多个平凡日子的总和</h2>
+<p> 一千公里听起来很远。可真正跑起来，它从来不是一次完成的。它被拆散在一年里的许多个清晨、傍晚和夜晚，藏在一次次五公里、十公里，以及那些状态不好、只勉强跑完几公里的训练里。有些时候天气很好，脚步轻快，跑起来仿佛毫不费力；也有些时候身体疲惫，刚出门就开始怀疑自己为什么要跑。
+ 有迎着风的时候，也有淋着雨的时候；有看过日出，也有在夜色里独自跑过熟悉的街道。现在回头看，那些当时觉得普普通通的跑步记录，最终连在了一起，变成了今天的这一千公里。原来所谓的“很远”，不过是把一段段不远的路，坚持走了下去。</p>
+<h2>并不是每一次出发，都充满动力</h2>
+<p> 跑到一千公里，靠的并不是每天都有强烈的热情。很多时候，我也不想出门。工作忙、天气不好、身体疲惫，或者只是单纯地想偷懒。真正困难的往往不是完成一场长跑，而是在这些时刻穿好鞋，对自己说：先出去跑一会儿。有时跑着跑着，状态慢慢就回来了；有时直到结束，依然觉得辛苦。但现在想来，那些状态不好的跑步同样重要。它们或许没有漂亮的配速，也没有值得炫耀的数据，却让我明白了一件事：
+ <strong>坚持不是始终热爱，而是在热情暂时消失的时候，依然愿意继续做下去。</strong>
+ 当然，坚持也不等于勉强自己。累了就休息，疼了就停下来，学着听身体的声音，再在合适的时候重新出发。能够长期跑下去，比任何一次速度和距离都更加重要。
+<img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@master/img/20260823001210351.png" alt="" /></p>
+<h2>一千公里，是终点，也是途中的一块路标</h2>
+<p> 今天值得纪念，但它并不是跑步的终点。完成年度目标以后，我没有突然变成一个多么了不起的人。明天醒来，生活仍然照常继续；下一次跑步，也依然要从第一步开始。所以，我更愿意把这一千公里看作一块路标。它提醒我：我曾经认真地为一件事付出时间，也确实通过一次次微小的行动，抵达了自己设定的地方。
+ 这一千公里不是某一个瞬间的壮举，而是过去的我送给今天的我，一份由时间和坚持共同完成的礼物。接下来，我不急着立刻为自己增加一个更大的数字。还是想好好跑步，认真感受每一次出发，健康地跑得更久一些。
+ <strong>谨以此文，纪念自己年中跑过的第一个千公里。</strong>
+ 也谢谢那个在许多个想要放弃的时刻，最终还是选择奔向前方的自己。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/51/"/><category term="running"/><published>2026-08-22T16:14:49+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/50/</id><title>关于苹果iMessage 打字卡顿BUG</title><updated>2026-08-17T01:02:59+00:00</updated><content type="html"><![CDATA[<p> 在黑苹果升级了26.6系统以后，iMessage非常卡，是打字都是肉眼可见的卡，然后我去网上找资料，我发现白果也是存在同样的问题，我看苹果官方给的解决方案是电脑注销换个账户，我找到的并且试验成功的解决方案就是：</p>
+<p> 给iMessage里面的苹果账户退出，然后退出iMessage，然后重新登录。</p>
+<h4>想说一句，SB厨子</h4>
+]]></content><link href="https://blog.xcouture.cc/posts/50/"/><category term="杂记"/><published>2026-08-17T01:02:59+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/49/</id><title>无糖可乐比咖啡劲大</title><updated>2026-07-31T18:13:29+00:00</updated><content type="html"><![CDATA[<p> 凌晨两点，我躺在床上毫无困意。大概是因为晚上十一点喝了一瓶无糖可乐，没想到它的后劲居然比咖啡还大。深夜睡不着也没什么事情可做，索性记录一下今天和lanlan小朋友看的《蜘蛛侠4：崭新之日》。</p>
+<p> 电影承接《蜘蛛侠：英雄无归》的结局。为了拯救世界，彼得·帕克让所有人忘记了自己。几年过去，曾经的好友内德和恋人MJ已经开始了新的生活，梅姨也不再陪伴在他身边。彼得独自生活在纽约，一边努力维持普通人的生活，一边继续以蜘蛛侠的身份守护城市。失去亲情、友情和爱情之后，他变得更加沉默，也不得不独自承担成为英雄的代价。</p>
+<p> 影片中，彼得不仅要面对蝎子等反派带来的威胁，还因为长期积累的压力和身体变化陷入新的危机。在一次次战斗中，他遇到了绿巨人、惩罚者等人物。彼得也曾迷茫、痛苦，甚至怀疑自己的选择，但他最终还是接受了现实，重新穿上经典的红蓝战衣，继续做纽约市民的“好邻居蜘蛛侠”。</p>
+<p> 看完电影后，我最大的感受是：真正的英雄并不是从不害怕，也不是永远有人陪伴，而是在失去许多东西以后，依然愿意帮助别人。彼得明明可以重新去找MJ和内德，却为了保护他们，把自己的思念藏在心里。与那些激烈的战斗相比，这份克制反而更让我感动。</p>
+<p> 这一部里的蜘蛛侠不再只是那个依赖高科技装备和其他超级英雄的少年，而是逐渐成长为一个能够独立承担责任的人。他的生活虽然孤独，却没有因此放弃善良。电影也让我明白，成长往往伴随着失去，但人不能永远停留在过去。只要愿意继续向前，每一天都有可能成为属于自己的“崭新之日”。</p>
+<p> 写到这里已经快凌晨三点了，我还是没有一点困意。看来以后晚上除了咖啡，无糖可乐也得谨慎对待。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/49/"/><category term="杂记"/><published>2026-07-31T18:13:10+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/48/</id><title>奇怪的人际关系</title><updated>2026-07-16T15:06:04+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>我们是认识的人，但不是互相重视、稳定回应的朋友。有些关系靠我主动维持，有些关系则让我看清了人与人之间不同的分寸感。</p>
+</blockquote>
+<p>最近遇到了两件小事，让我重新思考所谓的“朋友关系”。</p>
+<p>第一件事，是我在朋友圈看到一个朋友发了很有意思的内容，于是在下面留了评论。几分钟过去，对方没有回复，却又继续发了一条新的朋友圈。那一刻，我产生了一种难以形容的感觉：他明明还在使用微信，却没有回应我的话。究竟是没有看到、不知道怎么回复，还是根本不想回复？虽然朋友圈评论并没有必须回复的规定，但这种无声的忽略，还是会让主动交流的人感到尴尬。</p>
+<p>我平时并不是一个喜欢发朋友圈的人，也很少为了获得关注而频繁评论别人。只有看到真正感兴趣的内容，或者觉得彼此关系不错时，我才会主动说几句话。对我来说，评论是一种友好的表达，也代表我愿意参与对方的生活。所以当这份主动长期得不到回应时，我难免会怀疑，是不是自己高估了这段关系。</p>
+<p>另一件事，则与钱有关。之前有个朋友向我借钱，后来只归还了一半，剩下的钱直到现在也没有还。奇怪的是，对方经常在朋友圈分享自己的生活，也时常晒出一些奢侈品。也许那些东西并不代表他的真实经济状况，也许背后还有我不了解的原因，但看到这些内容时，我还是会觉得不舒服。不是因为我舍不得那笔钱，而是因为一个人有能力展示体面生活，却没有主动交代欠款，多少反映了他对承诺和他人感受的态度。</p>
+<p>剩下的钱，我已经不打算再要了。不是因为这件事合理，也不是因为对方不需要偿还，而是我不想再为了这笔钱继续消耗自己的情绪。就把它当作一次看清关系的成本：借出去的是钱，收回来的是对一个人的认识。</p>
+<p>这两件事看起来不同，其实都有相似之处——人与人对关系的重视程度并不总是对等的。一个忽略了我的主动，一个忽略了自己的承诺。他们或许并没有明显的恶意，只是没有把我的感受和这段关系放在足够重要的位置。</p>
+<p>后来我渐渐明白，有些关系不必争论，也不必追问，只需要重新摆放到合适的位置。可以继续认识，可以保持基本礼貌，但不必再投入同样的信任和热情。真正值得珍惜的朋友，不一定每条评论都会回复，也未必永远不犯错，但至少会在意你的感受、尊重彼此的承诺，不会总让你怀疑自己是否打扰了对方。</p>
+<p>人与人之间最让人失望的，往往不是一次没有回复，也不只是一笔没有还清的钱，而是从这些细节中发现：原来自己珍惜的关系，在对方那里可能并没有同样的分量。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/48/"/><category term="杂记"/><published>2026-07-16T15:05:21+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/47/</id><title>关于MosDNS没有轮转机制解决方案</title><updated>2026-07-13T13:04:38+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>最近在折腾网络过程中，因为采用了<code>mosdns</code>进行分流，但是发现突然发现终端设备突然获取不到<code>IP</code>地址了，排查了好几天，才发现<code>MosDNS</code>没有轮转机,导致我软路由的内存直接溢出，然后借用<code>codex</code>写了一个删除日志的机制，摆脱内存溢出的问题。</p>
+</blockquote>
+<p>当前安装的日志保护脚本位于：</p>
+<pre><code class="language-bash">/usr/sbin/mosdns-log-guard
+</code></pre>
+<p>内容如下：</p>
+<pre><code class="language-shell">#!/bin/sh
+
+LOG_FILE=&quot;${LOG_FILE:-/var/log/mosdns.log}&quot;
+MAX_SIZE=&quot;${MAX_SIZE:-5242880}&quot;
+INTERVAL=&quot;${INTERVAL:-30}&quot;
+
+check_log() {
+	[ -f &quot;$LOG_FILE&quot; ] || return 0
+
+	SIZE=&quot;$(wc -c &lt; &quot;$LOG_FILE&quot; 2&gt;/dev/null)&quot;
+	case &quot;$SIZE&quot; in
+		&#x27;&#x27;|*[!0-9]*) return 0 ;;
+	esac
+
+	if [ &quot;$SIZE&quot; -gt &quot;$MAX_SIZE&quot; ]; then
+		logger -t mosdns-log-guard \
+			&quot;mosdns log reached ${SIZE} bytes; truncating at limit ${MAX_SIZE}&quot;
+		: &gt; &quot;$LOG_FILE&quot;
+	fi
+}
+
+if [ &quot;$1&quot; = &quot;--once&quot; ]; then
+	check_log
+	exit 0
+fi
+
+while true; do
+	check_log
+	sleep &quot;$INTERVAL&quot;
+done
+</code></pre>
+<p>参数含义：</p>
+<pre><code>日志文件：/var/log/mosdns.log
+日志上限：5242880字节，即5 MiB
+检查间隔：30秒
+</code></pre>
+<p>对应的开机服务位于：</p>
+<pre><code>/etc/init.d/mosdns-log-guard
+</code></pre>
+<p>内容如下：</p>
+<pre><code class="language-bash">#!/bin/sh /etc/rc.common
+
+START=76
+STOP=10
+USE_PROCD=1
+
+PROG=/usr/sbin/mosdns-log-guard
+
+start_service() {
+	procd_open_instance
+	procd_set_param command &quot;$PROG&quot;
+	procd_set_param respawn 3600 5 5
+	procd_set_param file &quot;$PROG&quot;
+	procd_close_instance
+}
+</code></pre>
+<p>手动检查一次可以运行：</p>
+<pre><code class="language-bash">/usr/sbin/mosdns-log-guard --once
+</code></pre>
+<p>查看服务状态：</p>
+<pre><code class="language-bash">ubus call service list &#x27;{&quot;name&quot;:&quot;mosdns-log-guard&quot;}&#x27;
+</code></pre>
+<p>查看是否开机启用：</p>
+<pre><code class="language-bash">/etc/init.d/mosdns-log-guard enabled
+</code></pre>
+<p>查看保护服务产生的系统日志：</p>
+<pre><code class="language-bash">logread | grep mosdns-log-guard
+</code></pre>
+]]></content><link href="https://blog.xcouture.cc/posts/47/"/><category term="技术"/><published>2026-07-13T13:04:38+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/46/</id><title>万象输入方案配置</title><updated>2026-07-07T02:26:07+00:00</updated><content type="html"><![CDATA[<h3>1.配置文件</h3>
+<p>自定义配置文件新建<code>wanxiang.custom.yaml</code></p>
+<pre><code class="language-yaml"># 万象拼音个人配置
+# 用途：整理根目录 wanxiang.custom.yaml，适合 Mac 与 Hamster3 同步使用。
+#
+# 说明：
+# - patch 下的配置会覆盖/补充 wanxiang.schema.yaml 的对应项。
+# - 这份文件保留全拼、个人短语、候选数量三个稳定项。
+# - 已开启造词功能：适合让常用新词逐渐变顺手。
+
+patch:
+  # 输入方案转写规则。
+  # 当前使用全拼。以后如果输入 /zrm、/flypy、/mspy 等切换双拼，
+  # 万象的 set_schema.lua 会改这里，所以这段应该放在根目录配置里。
+  speller/algebra:
+    __patch:
+      # 可选模糊音示例：需要时取消注释。
+      # - wanxiang_algebra:/模糊音_z_zh
+      - wanxiang_algebra:/base/全拼
+
+  # 个人快捷短语文件。
+  # 对应根目录 custom_phrase_personal.txt。
+  custom_phrase/user_dict: custom_phrase_personal
+
+  # 候选数量。
+  # 当前保留 6 个。万象注释里提示不要超过 6，
+  # 因为 7/8/9/0 还会参与声调或其他输入逻辑。
+  menu/page_size: 6
+
+  # 造词功能。
+  # recognizer/patterns/add_user_dict：允许用 `` 引导造词。
+  # user_dict_set/enable_user_dict：启用已造词的用户词典读取。
+  # add_user_dict/enable_user_dict：启用造词写入用户词典。
+  # add_user_dict/enable_auto_phrase：开启自动无词频造词，让输入越用越顺。
+  recognizer/patterns/add_user_dict: &quot;^``[A-Za-z/`&#x27;]*$&quot;
+  user_dict_set/enable_user_dict: true
+  add_user_dict/enable_user_dict: true
+  add_user_dict/enable_auto_phrase: true
+</code></pre>
+<p>新建配置个人自定义短语文件<code>custom_phrase_personal.txt</code></p>
+<h3>2.同步方案</h3>
+<p>采取的是<code>iCloud</code>同步方案，同步<code>sync</code>里面进行配置,最终同步效果如下</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@master/img/image-20260707102024215.png" alt="" /></p>
+]]></content><link href="https://blog.xcouture.cc/posts/46/"/><category term="杂记"/><published>2026-07-07T02:26:07+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/45/</id><title>博客优化</title><updated>2026-07-05T11:32:55+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>好久没有写博客了，自己的博客功能和显示还是有点问题，刚好借助AI给优化了一下</p>
+</blockquote>
+<h2>前端展示优化</h2>
+<ul>
+<li>
+修复首页社交图标下方横线间距过大的问题<ul>
+<li>清掉 Mirror 原始图标 <code>margin-bottom</code> 带来的空白</li>
+<li>横线重新居中显示</li>
+</ul>
+</li>
+<li>
+优化字体策略<ul>
+<li>改成系统字体优先</li>
+<li>不再优先使用 IBM Plex</li>
+<li>不引入远程字体/CDN，提升国内和海外访问速度</li>
+<li>代码块使用系统等宽字体</li>
+</ul>
+</li>
+<li>
+修复 Markdown 表格主题颜色 bug<ul>
+<li>解决浅色模式下表格黑底、文字过暗的问题</li>
+<li>表格现在会跟随浅色/深色主题切换</li>
+<li>友链表格显示正常</li>
+</ul>
+</li>
+</ul>
+<h2>Mermaid 流程图优化</h2>
+<ul>
+<li>修复 Mermaid 渲染后仍显示 Loading 的问题</li>
+<li>优化流程图字体显示，避免文字被遮挡</li>
+<li>增加流程图自适应宽度</li>
+<li>
+增加流程图工具栏<ul>
+<li>放大</li>
+<li>缩小</li>
+<li>适应宽度</li>
+<li>复制源码</li>
+<li>全屏查看</li>
+</ul>
+</li>
+<li>支持点击流程图进入全屏查看</li>
+</ul>
+<h2>图片与资源优化</h2>
+<ul>
+<li>
+修正旧图片链接分支问题<ul>
+<li>将 <code>gitblog@main</code> 兼容替换为 <code>gitblog@master</code></li>
+<li>将 raw GitHub <code>main</code> 图片链接兼容替换为 <code>master</code></li>
+</ul>
+</li>
+<li>
+给文章图片增加懒加载<ul>
+<li><code>loading=&quot;lazy&quot;</code></li>
+<li><code>decoding=&quot;async&quot;</code></li>
+</ul>
+</li>
+<li>目标是通过 Typora + PicGo + GitHub Issues 写博客的流程</li>
+</ul>
+<h2>首页链接与社交按钮</h2>
+<ul>
+<li>
+<p>更新联系方式</p>
+<ul>
+<li>
+<p>X</p>
+</li>
+<li>
+<p>Telegram</p>
+</li>
+<li>
+<p>添加友链入口</p>
+</li>
+<li>
+<p>首页图标按钮跳转到</p>
+</li>
+</ul>
+</li>
+<li>
+<p>恢复/整理 RSS、跑步记录、友链等入口</p>
+</li>
+</ul>
+<h2>友链系统</h2>
+<ul>
+<li>
+<p>在 <code>gitblog</code> 中增加友链自动收录逻辑</p>
+</li>
+<li>
+<p>友链评论格式：</p>
+<pre><code class="language-markdown">名字：朋友博客名
+链接：https://example.com
+描述：一句话介绍这个博客
+</code></pre>
+</li>
+</ul>
+]]></content><link href="https://blog.xcouture.cc/posts/45/"/><category term="总结"/><published>2026-07-05T11:32:55+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/44/</id><title>友链</title><updated>2026-07-05T13:19:06+00:00</updated><content type="html"><![CDATA[<p>如果你想交换友链，请按下面格式评论；我点 ❤️ 后会自动收录。</p>
+<p>名字：你的博客名
+链接：<a href="https://example.com">https://example.com</a>
+描述：一句话介绍你的博客</p>
+<hr />
+<h2>已收录</h2>
+<!-- friends:start -->
+<table>
+<thead>
+<tr>
+<th>名字</th>
+<th>链接</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://blog.yihong0618.me/" target="_blank" rel="noopener noreferrer">yihong0618</a></td>
+<td><a href="https://blog.yihong0618.me/" target="_blank" rel="noopener noreferrer">https://blog.yihong0618.me/</a></td>
+<td>yihong的记录</td>
+</tr>
+<tr>
+<td><a href="https://mrasong.com/" target="_blank" rel="noopener noreferrer">mrasong</a></td>
+<td><a href="https://mrasong.com/" target="_blank" rel="noopener noreferrer">https://mrasong.com/</a></td>
+<td>麻叔的tips</td>
+</tr>
+</tbody>
+</table>
+<!-- friends:end -->]]></content><link href="https://blog.xcouture.cc/posts/44/"/><category term="友链"/><published>2026-07-04T15:29:13+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/40/</id><title>Hermes 踩坑</title><updated>2026-05-28T06:27:57+00:00</updated><content type="html"><![CDATA[<p>连续对话提示：</p>
+<pre><code class="language-bash">Error: Session continuation requires API key authentication. Configure API_SERVER_KEY to enable this feature.
+</code></pre>
+<p>解决方式：</p>
+<p>在Hermes的环境变量中需要添加两条配置文件</p>
+<pre><code class="language-bash"># 路径
+.hermes/.env
+
+API_SERVER_ENABLED=true
+API_SERVER_KEY=你自己设置的密钥 # 最好是8为数字字符
+</code></pre>
+<p>然后重启网关，如果有桌面端就重启桌面端</p>
+<pre><code class="language-bash">hermes gateway restart
+</code></pre>
+]]></content><link href="https://blog.xcouture.cc/posts/40/"/><category term="Agent"/><published>2026-05-28T06:27:36+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/39/</id><title>深夜流水账：长跑、网络折腾与AI时代的胡思乱想写点东西</title><updated>2026-05-18T17:02:51+00:00</updated><content type="html"><![CDATA[<p>晚上跑了10 公里，最近积压的事情有点多，躺在床上脑子里也跟着胡思乱想，睡不着。</p>
+<p>深夜十二点半，一个人坐在电脑前敲下这些文字，其实我也不知道自己究竟想写些什么，全当是给大脑做一次碎片清理。</p>
+<h2>周末的“网络考古”与 AI 工具横评</h2>
+<p>这周六日，我把大把时间耗在了折腾家里网络上，主要是为了彻底解决 <strong>DNS 泄露</strong>的问题。</p>
+<p>折腾期间，我顺便做了一组“AI 盲测”——让 <strong>DeepSeek、Gemini 和 ChatGPT</strong> 去解决同一个网络坑。结果挺有意思，<strong>ChatGPT 完胜</strong>，剩下两个在复杂网络排错上还是差点意思。</p>
+<p>最近我也开始尝试用 <strong>Hermes</strong> 来处理一些琐碎的自动化任务，不得不说，现在的 Agent 确实进化得越来越聪明了，常规问题基本能让人当个“甩手掌柜”。但作为技术牛马，<strong>安全与权限分配</strong>也是我最担忧的漏洞：</p>
+<ul>
+<li><strong>失去约束的风险</strong>：没有严格限制的 AI 可以直接化身黑客攻击服务器。</li>
+<li><strong>隐私越界</strong>：像 Hermes 这类 Agent，如果权限全开，它能肆无忌惮地读取和操作你本地的所有文件，甚至连网盘里的 iCloud 和 OneDrive 都能直接访问。</li>
+</ul>
+<p><strong>我的解法是</strong>：在安装和配置阶段必须严控权限。涉及敏感操作时，每一次下发指令都需要人工确认，并将其作为铁律固化到 Agent 的长效记忆当中。</p>
+<h2>关于“断更”两个月的周志反思</h2>
+<p>原本计划是每周写一次复盘的，今天去翻了一下 GitHub Issues 里的周志，才猛然发现自己居然已经<strong>断更了快两个月</strong>。</p>
+<p>看来，习惯这东西确实没那么容易刻进DNA。为了拯救这个好习惯，我打算在提醒清单里加一条Tips：<strong>每周日下午定时提醒</strong>。本周末重新开张。</p>
+<h2>跑步：500km 进度条即将过半</h2>
+<p>聊点有成就感的事。今年的跑步目标是 1000km，目前<strong>马上就要解锁前 500km 了</strong>。</p>
+<p>虽然过程是漫长的积累，但只要步子不停，跑着跑着，终点也就近了。</p>
+<p>现在脑子其实不想思考任何事了，只想睡觉。</p>
+<p>事实证明，<strong>深夜真的不能跑长距离</strong>，多巴胺分泌过盛导致现在整个人处于一种诡异的亢奋状态。我已经能提前预想到明天自己靠黑咖啡疯狂续命的惨状了。</p>
+<p>稀里糊涂写了一堆，碎碎念结束。</p>
+<p>关机，睡觉。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/39/"/><category term="杂记"/><published>2026-05-18T17:02:24+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/38/</id><title>跑步首次“站台”</title><updated>2026-05-07T12:39:49+00:00</updated><content type="html"><![CDATA[<p> 人生中第一次“站台”，竟然是以这种方式实现的。
+ 单位组织的迷你马拉松，全程3.91公里。开赛前压根没想过能拿名次，毕竟和正值体力巅峰的学生们同场竞技，感觉没有胜算。
+ 最后以18分17秒完赛，摘得其他组亚军。总排名26哈哈，唯一的遗憾是前半程冲得太猛，不小心当了回“兔子”，给别人做了“嫁衣”。哈哈，菜就多练，没有白练，去年我都还是垫底的水平，不过，能在奔跑中感受这份单纯的快乐，看身体突破预期的极限，这远比名次更有意思。重在参与，这种惊喜的感觉确实很棒！</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/20260507203444646.jpg" alt="" /></p>
+]]></content><link href="https://blog.xcouture.cc/posts/38/"/><category term="杂记"/><published>2026-05-07T12:39:49+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/37/</id><title>南京</title><updated>2026-05-05T09:05:21+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>一座南京城，半个民国史。</p>
+</blockquote>
+<p> 在来到南京之前，这句话对我而言只是书本上的一个注脚。没曾想，这次因为培训的机会，我竟能在南京深深刻刻地待上一周。</p>
+<h4>1. 南京，是另一种底色</h4>
+<p> 同样是南方的名城，南京给我的感觉与杭州截然不同。如果说杭州是丝绸般的精致与柔和，那么南京则像是一块历经风霜却依然温润的古玉。</p>
+<p>走在街头，最先映入眼帘的是那醒目的<strong>黄色出租车</strong>，穿梭在城市的大街小巷。而路两旁遮天蔽日的<strong>梧桐树</strong>，则是这座城市最坚韧的脊梁。这些梧桐不仅仅是风景，它们像是某种历史的守望者，默默注视着这座城市的往昔与今朝。</p>
+<div align="center">   <img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/DDCA2DB2-CFDF-4923-834A-E56A56D4B031_1_105_c.jpeg" /> </div>
+<h4>2. 穿行在时光的缝隙里</h4>
+<p> 这一周的闲暇时光，我几乎都交给了那些带有厚重标签的地标：</p>
+<ul>
+<li><strong>新街口</strong>：在如织的人流中瞻仰孙中山先生的铜像，感受这座城市的“心脏”跳动。</li>
+<li><strong>总统府</strong>：回廊转折间，满是民国风云的残影，仿佛推开一扇门就能撞见一段旧梦。</li>
+<li><strong>秦淮河与夫子庙</strong>：当夜色降临，灯火摇曳的秦淮河才真正显露出了它金粉之地的温柔。</li>
+</ul>
+<p> 遗憾总是有的，因为行程关系，还有许多想去的地方未能成行。但正如人们常说的，留一点遗憾，是为了下一次更好的相逢。</p>
+<div align="center">   <img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/0B7BEC59-00EE-47BF-9064-4E1191BC3674_1_105_c-20260505164218589-20260505164446529.jpeg" /> </div>
+<h4>3. 玄武湖：一场“梧桐雪”里的奔跑</h4>
+<p> 作为一名跑者，每到一个城市，用双脚去丈量它的土地似乎成了我的仪式感。南京的跑步胜地，自然不能错过。</p>
+<p>在<strong>玄武湖</strong>畔跑了一圈十公里，那种体验极其奇妙。恰逢这个季节，南京的梧桐絮漫天飞舞。跑在湖边，那些飞絮扑面而来，视觉上美得像是在下一场鹅毛大雪，虽然呼吸间有些小麻烦，但那种身处画中的沉浸感，让这十公里跑得心旷神怡。</p>
+<div align="center">   <img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/20260505164711915.jpeg" /> </div>
+<div align="center">   <img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/20260505170443362.jpeg" /> </div>
+<h4>4. “再见”南京</h4>
+<p> 南京是一座值得细细品味的城市。它有它的不紧不慢，有它特有的风景线。这一周的停留只是惊鸿一瞥，那些没能走完的路，没能看全的景，我们下次见。</p>
+<div align="center">   <img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/20260505164924304.jpeg" /> </div>
+]]></content><link href="https://blog.xcouture.cc/posts/37/"/><category term="杂记"/><published>2026-05-05T08:58:53+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/36/</id><title>Garmin网页批量删除活动</title><updated>2026-03-31T13:05:45+00:00</updated><content type="html"><![CDATA[<p> 在浏览器控制台里面粘贴进去，前提是已经登录好了connect网页版本。</p>
+<pre><code class="language-js">// v0.30 2025-11-18 (China CN Version Modified)
+(function() {
+    &#x27;use strict&#x27;;
+
+    window.connectActivities = function(deviceArg, operationArg) {
+        window.localStorage.removeItem(&quot;_connect_activities_cancel&quot;);
+
+        class ShowUsageError extends Error { constructor(message) { super(message); this.name = this.constructor.name; } }
+        class CancellationError extends Error { constructor(message) { super(message); this.name = this.constructor.name; } }
+
+        function replaceAll(str, find, replace) { return str.replace(new RegExp(find, &#x27;g&#x27;), replace); }
+
+        var virtualConsole = {
+            lines: [], currentLine: 0, subs: {},
+            setSub: function(key, value) { virtualConsole.subs[key] = value; },
+            log: function (msg, appendToCurrentLine) {
+                if (!appendToCurrentLine) virtualConsole.currentLine++;
+                if (appendToCurrentLine &amp;&amp; virtualConsole.lines[virtualConsole.currentLine]) {
+                    virtualConsole.lines[virtualConsole.currentLine] += msg;
+                } else {
+                    virtualConsole.lines[virtualConsole.currentLine] = msg;
+                }
+                console.clear();
+                virtualConsole.lines.forEach(function (line) {
+                    for (const key in virtualConsole.subs) { line = replaceAll(line, key, virtualConsole.subs[key]); }
+                    console.log(line);
+                });
+            }
+        }
+
+        async function fetchRequest(description, url, method, data, requestIsJson) {
+            // 自动转换域名为国服 .cn
+            url = url.replace(&#x27;garmin.com&#x27;, &#x27;garmin.cn&#x27;);
+            
+            const shouldCancel = window.localStorage.getItem(&quot;_connect_activities_cancel&quot;);
+            if (shouldCancel) { throw new CancellationError(&#x27;cancelled by user&#x27;); }
+
+            const headers = new Headers();
+            const token = document.querySelector(&#x27;meta[name=&quot;csrf-token&quot;]&#x27;)
+            if (token) {
+                let csrf_token = token.content;
+                url = url.replace(&quot;connect.garmin.cn/&quot;, &quot;connect.garmin.cn/gc-api/&quot;);
+                headers.append(&#x27;connect-csrf-token&#x27;, csrf_token);
+            } else {
+                let access_token;
+                try {
+                    const tokenStorage = window.localStorage.getItem(&quot;token&quot;);
+                    access_token = JSON.parse(tokenStorage).access_token;
+                } catch (e) { throw new Error(`请确保已登录佳明官网。`); }
+                headers.append(&quot;Authorization&quot;, `Bearer ${access_token}`);
+            }
+
+            if (requestIsJson) { headers.append(&quot;Content-Type&quot;, &quot;application/json&quot;); }
+            headers.append(&quot;NK&quot;, &quot;NT&quot;);
+            headers.append(&quot;Di-Backend&quot;, &quot;connectapi.garmin.cn&quot;);
+
+            let response = await fetch(url, { method: method || &#x27;GET&#x27;, headers: headers, body: data || null });
+            if (!response.ok) { throw new Error(`${description} 失败: ${response.status}`); }
+            return response;
+        }
+
+        const maxLimit = 10000;
+        let operation = undefined;
+        const options = { limit: maxLimit, device: undefined, ignoreMissingDevices: false, name: undefined, at: undefined, after: undefined, before: undefined, startingAt: undefined, endingAt: undefined, type: undefined, newType: undefined };
+
+        async function main() {
+            // 解析参数逻辑
+            if (typeof operationArg === &quot;string&quot;) {
+                options.device = deviceArg; operation = operationArg;
+            } else if (typeof deviceArg === &quot;string&quot;) {
+                operation = deviceArg;
+                if (typeof operationArg === &#x27;object&#x27;) Object.assign(options, operationArg);
+            }
+
+            // 核心检查点：已修改为适配国服域名
+            if (!window.location.href.includes(&#x27;garmin.cn&#x27;) &amp;&amp; !window.location.href.includes(&#x27;garmin.com&#x27;)) {
+                throw new Error(&#x27;脚本必须在佳明官网运行&#x27;);
+            }
+
+            console.log(&quot;⏳ 正在获取活动列表...&quot;);
+            const activityListUrl = `https://connect.garmin.cn/activitylist-service/activities/search/activities?limit=${options.limit}&amp;start=0`;
+            const activities = await (await fetchRequest(&#x27;获取活动列表&#x27;, activityListUrl)).json();
+
+            if (activities.length === 0) { console.log(&#x27;未找到活动&#x27;); return; }
+
+            const filteredActivities = activities.filter(activity =&gt; {
+                const activityDate = activity.startTimeLocal.substring(0, 10);
+                if (options.before &amp;&amp; activityDate &gt;= options.before) return false;
+                return true;
+            });
+
+            console.log(`符合筛选条件的活动数量: ${filteredActivities.length}`);
+
+            for (const a of filteredActivities) {
+                console.log(`• 📅 ${a.startTimeLocal} | ID: ${a.activityId} | 链接: https://connect.garmin.cn/modern/activity/${a.activityId}`);
+                if (operation === &#x27;delete&#x27;) {
+                    if (confirm(`确定要删除活动 ${a.activityId} 吗？`)) {
+                        await fetchRequest(&#x27;删除活动&#x27;, `https://connect.garmin.cn/activity-service/activity/${a.activityId}`, &#x27;DELETE&#x27;);
+                        console.log(`✅ 已删除: ${a.activityId}`);
+                    }
+                }
+            }
+        }
+
+        main().catch(e =&gt; console.error(e));
+    };
+
+    console.log(&quot;%c✅ 佳明国服专用版脚本加载完毕！&quot;, &quot;color: #32CD32; font-size: 16px; font-weight: bold;&quot;);
+    console.log(&quot;使用示例: connectActivities(&#x27;show&#x27;, { before: &#x27;2026-01-01&#x27; });&quot;);
+})();
+</code></pre>
+<pre><code class="language-js">window.confirm = function() { return true; }; // 自动确认删除
+</code></pre>
+<pre><code class="language-js">connectActivities(&quot;delete&quot;, { before: &quot;2026-01-29&quot; }); // 示例 2026年1月29日年之前的数据
+</code></pre>
+]]></content><link href="https://blog.xcouture.cc/posts/36/"/><category term="杂记"/><published>2026-03-31T13:04:26+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/35/</id><title>OpenClash+Mosdns+AdGuard+Atrust网络全打通</title><updated>2026-03-08T07:21:15+00:00</updated><content type="html"><![CDATA[<p> 因为自己的种种需求，所以产生了这个想法，在家实现内外网都是自由，而且不需要挂VPN软件，这个想法终于在经过自己不断折腾，终于落地了。</p>
+<p> 基础操作就不说，怎么安装插件也不说，这些都是可以自行GitHub上面就可以的，都是开源的，主要是说一下自己的配置：</p>
+<h3>OpenClash</h3>
+<p>运行模式肯定是tun模式，我个人也比较推荐这个模式</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308144907897.png" alt="" /></p>
+<p> 本地DNS劫持选择禁用</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308145009618.png" alt="" /></p>
+<p> 覆写设置里面就是自定义dns上游服务器勾选上，Nameserve和Fallback都是 127.0.0.1 端口号是你的mosdns端口号，我是默认5335，取决于你自己的设置。</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308145625537.png" alt="" /></p>
+<p> OpenClash的设置到这里基本差不多，订阅自行导入，这里不做过多赘述。</p>
+<h3>MosDns</h3>
+<p> 我的建议是大家直接根据自己的需求配置，用AI进行补充调整，下面我的配置也只是仅供参考，因为我加了学校的内网配置，以及我的订阅代理代理需要解析，进行调整，否则tls加密无法解析到。</p>
+<pre><code class="language-yml">log:
+  level: info
+  file: /var/log/mosdns.log
+
+api:
+  http: 0.0.0.0:9091
+
+include: []
+
+plugins:
+  # --- 1. 资源集定义 ---
+  - tag: zjjs_domain
+    type: domain_set
+    args:
+      files: [&quot;/etc/mosdns/rule/zjjs_domain.txt&quot;]
+  - tag: geosite_cn
+    type: domain_set
+    args:
+      files: [&quot;/var/mosdns/geosite_cn.txt&quot;]
+  - tag: geoip_cn
+    type: ip_set
+    args:
+      files: [&quot;/var/mosdns/geoip_cn.txt&quot;]
+  - tag: geosite_apple
+    type: domain_set
+    args:
+      files: [&quot;/var/mosdns/geosite_apple.txt&quot;]
+  - tag: geosite_no_cn
+    type: domain_set
+    args:
+      files: [&quot;/var/mosdns/geosite_geolocation-!cn.txt&quot;]
+  - tag: whitelist
+    type: domain_set
+    args:
+      files: [&quot;/etc/mosdns/rule/whitelist.txt&quot;]
+  - tag: blocklist
+    type: domain_set
+    args:
+      files: [&quot;/etc/mosdns/rule/blocklist.txt&quot;]
+  - tag: greylist
+    type: domain_set
+    args:
+      files: [&quot;/etc/mosdns/rule/greylist.txt&quot;]
+  - tag: ddnslist
+    type: domain_set
+    args:
+      files: [&quot;/etc/mosdns/rule/ddnslist.txt&quot;]
+  - tag: hosts
+    type: hosts
+    args:
+      files: [&quot;/etc/mosdns/rule/hosts.txt&quot;]
+  - tag: redirect
+    type: redirect
+    args:
+      files: [&quot;/etc/mosdns/rule/redirect.txt&quot;]
+  - tag: adlist
+    type: domain_set
+    args:
+      files: [&quot;/etc/mosdns/rule/disable-ads.txt&quot;]
+  - tag: local_ptr
+    type: domain_set
+    args:
+      files: [&quot;/etc/mosdns/rule/local-ptr.txt&quot;]
+  - tag: stream_media
+    type: domain_set
+    args:
+      files:
+        - /var/mosdns/geosite_disney.txt
+        - /var/mosdns/geosite_netflix.txt
+        - /var/mosdns/geosite_hulu.txt
+        - /etc/mosdns/rule/streaming.txt
+  - tag: cloudflare_cidr
+    type: ip_set
+    args:
+      files: [&quot;/etc/mosdns/rule/cloudflare-cidr.txt&quot;]
+  - tag: proxy_node_domain
+    type: domain_set
+    args:
+      files: [&quot;/etc/mosdns/rule/proxy_nodes.txt&quot;]
+
+  # --- 2. 缓存与转发插件 ---
+  - tag: lazy_cache
+    type: cache
+    args:
+      size: 30000
+      lazy_cache_ttl: 0
+      dump_file: /etc/mosdns/cache.dump
+      dump_interval: 3600
+
+  # 教育网内网转发：通过 aTrust 容器 1080 端口
+  - tag: forward_zjjs
+    type: forward
+    args:
+      concurrent: 1
+      upstreams:
+        - addr: &quot;tcp://10.10.1.236:53&quot;
+          socks5: &quot;127.0.0.1:1080&quot;
+
+  # 国内转发：含纯 IP 引导破解 TLS 超时
+  - tag: forward_local
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: 223.5.5.5
+        - addr: https://doh.pub/dns-query
+          bootstrap: 119.29.29.29
+        - addr: https://dns.alidns.com/dns-query
+          bootstrap: 119.29.29.29
+
+  # 国外转发：Socks5 7891 (Clash)
+  - tag: forward_remote
+    type: forward
+    args:
+      concurrent: 1
+      upstreams:
+        - addr: &quot;https://dns.google/dns-query&quot;
+          bootstrap: &quot;8.8.8.8&quot;
+          socks5: &quot;127.0.0.1:7891&quot;
+
+  # --- 3. 响应处理序列 ---
+  - tag: modify_ttl
+    type: sequence
+    args:
+      - exec: ttl 5-600 # 优化缓存提升性能
+
+  - tag: has_resp_sequence
+    type: sequence
+    args:
+      - matches: has_resp
+        exec: accept
+
+  # --- 4. 核心主逻辑序列 ---
+  - tag: main_sequence
+    type: sequence
+    args:
+      - exec: $hosts
+      - exec: jump has_resp_sequence
+      # 破解代理节点死循环
+      - matches: qname $proxy_node_domain
+        exec: $forward_local
+      - exec: jump has_resp_sequence
+
+      # 缓存逻辑
+      - matches:
+          - &quot;!qname $blocklist&quot;
+          - &quot;!qname $adlist&quot;
+        exec: $lazy_cache
+      - exec: jump has_resp_sequence
+
+      # 分流判定
+      - matches: qname $geosite_cn
+        exec: $forward_local
+      - exec: jump has_resp_sequence
+
+      - matches: qname $geosite_no_cn
+        exec: $forward_remote
+      - exec: jump has_resp_sequence
+
+      # 兜底
+      - exec: $forward_local
+
+  # --- 5. 服务监听 ---
+  - tag: udp_server
+    type: udp_server
+    args:
+      entry: main_sequence
+      listen: &quot;:5335&quot;
+  - tag: tcp_server
+    type: tcp_server
+    args:
+      entry: main_sequence
+      listen: &quot;:5335&quot;
+</code></pre>
+<p> 设置具体如下：</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308150339538.png" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308150400040.png" alt="" /></p>
+<p>根据自己实际需求进行填写，我这也只是参考作用，给自己做一个备份。</p>
+<h3>AdGuard</h3>
+<p> 主要是防止自己的端口冲突，这里可以自己设置，我是这样设置的，最主要的设置在内部的 DNS设置里面，不能写错了，下面是我的作为参考。</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308150728839.png" alt="" /></p>
+<p> DNS设置</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308150910859.png" alt="" /></p>
+<p> 到这里其实设置的基本差不多了，还有一个最主要的没有设置，那就是网络里面的DCHP/DNS</p>
+<h3>DHCP/DNS</h3>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308151225689.png" alt="" /></p>
+<p> 转发端口是AdGuard监听端口</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260308151451931.png" alt="" /></p>
+<p> 到这里基本就没啥问题了，ATrust其实我就不多介绍了，按照自己的实际需求来，参考GitHub项目[<a href="https://github.com/docker-easyconnect/docker-easyconnect">docker-easyconnect</a>](https://github.com/docker-easyconnect/docker-easyconnect)，这个就可以了。</p>
+<h4>特别鸣谢：</h4>
+<p>感谢[<a href="https://space.bilibili.com/244390800?spm_id_from=333.337.0.0">乌龙蜜桃来一打</a>](https://space.bilibili.com/244390800?spm_id_from=333.337.0.0)</p>
+]]></content><link href="https://blog.xcouture.cc/posts/35/"/><category term="技术"/><published>2026-03-08T07:21:15+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/34/</id><title>近况</title><updated>2026-02-13T00:17:49+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>不需要太满，一切刚刚好就行</p>
+</blockquote>
+<p> 回来差不多一周多的时间了，不是吃席就是在吃席的路上，参加了两场婚礼，其实是有三场的，奈何第三场时间上冲突，加上距离上面是在太远了，和同学约好了杭州见；</p>
+<p> 说到老家的结婚，过程感觉挺有意思的，红包最近是没少整，但是说让我结婚，我现在是一点想法都没有，甚至有些恐婚，缘分这种东西都是走一步看一步吧；</p>
+<p> 每年回来都扫墓，是老家的习俗，但是给我姥姥扫墓的时候，我有些恍惚了，无语言表，希望姥姥在那边一切安好；</p>
+<p> 和好久没有聚的同学喝了一顿，五个人两瓶挺好，不是很晕，很久很久没有喝白酒了；</p>
+<p> 人生首个马拉松中签了，不知道到时候自己能坚持下来不，好久没有训练了，重在参与，尽力而为。</p>
+<p> 放一些近况的照片：</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/IMG_20260211_093549%20.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/IMG_20260212_204949.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/mmexport1770689780176.jpg" alt="" /></p>
+]]></content><link href="https://blog.xcouture.cc/posts/34/"/><category term="随笔"/><published>2026-02-13T00:17:49+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/32/</id><title>遵从本心</title><updated>2026-01-25T04:06:59+00:00</updated><content type="html"><![CDATA[<p>己所不欲，勿施于人。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/32/"/><category term="随笔"/><published>2026-01-19T13:14:42+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/31/</id><title>抽奖？又是陪跑的一年！</title><updated>2026-01-15T12:26:24+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>人生没有那么主角，当观众也挺好~</p>
+</blockquote>
+<p> 今年的年会虽比往年稍晚，却更显精致与厚重。灯光流转间，既有初相识的新面孔，也有许多年为登台的前辈。最让人动容的，是看到那些时隔12年、甚至30年再次登台的高光时刻。岁月或许刻下了皱纹，却从未熄灭他们心中炙热的火。</p>
+<p> 印象最深莫过于那两把吉他，一曲许巍的《故乡》，跨越三十年的时光回响，自述自己已经是30年没有登上舞台了，可能上次登上舞台是大学的联会，如今到了快要退休的年纪，瞬间点燃全场。这种精益求精的传承，让舞台不只是表演，更成了一场关于青春与热爱的致敬。</p>
+<p> 每年的联欢会最好玩的环节就是抽奖了，今年的号码是<code>1007</code>，拿到这个号码的时候我就在想，今年大概率要没了，一共四轮，300个奖项，从三等奖到特等奖，我昨左边同事抽到了二等奖，右边的三等奖，到我啥也没有哈哈哈哈，不过已经习惯了，毕竟重在参与嘛。</p>
+<p> 然后就是下面放一些瞬间的图片吧。</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/202601151.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/202601152.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/202601153.jpg" alt="" /></p>
+<p> 明年能不能不让我陪跑了？抽我？！</p>
+]]></content><link href="https://blog.xcouture.cc/posts/31/"/><category term="杂记"/><published>2026-01-15T12:26:24+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/30/</id><title>西湖</title><updated>2026-01-11T12:25:31+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>欲把西湖比西子 淡妆浓抹总相宜</p>
+</blockquote>
+<p> 好久没有来西湖了，这好像是我第一次自己来西湖，最近感觉自己魂不守舍的，本来打算跑步的，感觉自己最近是跑的有点多的，还是出门走走吧，半个月的时间没有好好的出门走走了，看看风景，不管风景美不美，走走应该是让人的心情变好一些。</p>
+<p> 自己从凤起路地铁站下，然后一直走到断桥-&gt;白堤-&gt;苏堤-&gt;雷峰塔，最后走到定安路地铁站，用手表统计了一下，大概是10km，可能是自己走的太快了，走的自己脚底板疼，冬天的西湖感觉有点像初春，出门没有穿棉袄，有太阳的地方还好，没有太阳的地方感觉寒风有些刺骨，自己也是一路走走停停，坐在西湖苏堤旁边的椅子上，望着湖水，对着对面的高楼大厦发呆，感觉还不错。熙熙攘攘的人群，很多都是来打卡拍照的，或者是带着小朋友出来玩的，天气比较不错，冬天感觉小朋友感觉过来踏春的。</p>
+<p> 整个过程自己带着耳机，没有何任何人说话，走到雷峰塔的时候我还在想，今天要不要等看着日落，想着自己没穿棉袄，就简单穿个外套，还是别自己搞自己了，下次吧，去西湖的机会应该会很多，每次去的时候感觉都是不一样，真就是：“年年岁岁花相似，岁岁年年人不同”，时间不语，只是不停的给出答案。</p>
+<p> 拍了一些简单的照片：</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/going.png" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/wslake1.png" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/IMG_20260111_145355.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/IMG_20260111_150523.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/IMG_20260111_154356.jpg" alt="" /></p>
+]]></content><link href="https://blog.xcouture.cc/posts/30/"/><category term="随笔"/><published>2026-01-11T12:25:31+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/29/</id><title>使用Gemini3 Pro优化苹果终端索引加载速度</title><updated>2026-01-10T06:33:47+00:00</updated><content type="html"><![CDATA[<p> 自己一开始对苹果终端索引加载速度并不是很在意，毕竟随着自己用到的环境变量越来越多，终端加载速度越来越慢，慢到了超出了我难以接受的范围，加载索引都要5秒左右，测试一个<code>ping</code>都要等索引加载一段时间才可以，于是自己想到了用AI去优化这个索引加载。</p>
+<p> 提出需求：</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20260110142458293.png" alt="" /></p>
+<p> 我的三个配置文件分别如下：</p>
+<p><code>.zshrc</code>:</p>
+<pre><code class="language-bash">if [[ -r &quot;${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh&quot; ]]; then
+  source &quot;${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh&quot;
+fi
+
+export ZSH=&quot;$HOME/.oh-my-zsh&quot;
+
+ZSH_THEME=&quot;powerlevel10k/powerlevel10k&quot;
+
+
+plugins=(git autojump zsh-autosuggestions zsh-syntax-highlighting)
+
+source $ZSH/oh-my-zsh.sh
+
+eval &quot;$(/opt/homebrew/bin/brew shellenv)&quot;
+DISABLE_MAGIC_FUNCTIONS=true
+ zstyle &#x27;:omz:update&#x27; mode disabled
+export PATH=&quot;/opt/homebrew/opt/openjdk@17/bin:$PATH&quot;
+export PATH=&quot;$HOME/.jenv/bin:$PATH&quot;
+eval &quot;$(jenv init -)&quot;
+
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+export PATH=&quot;/opt/homebrew/opt/node@20/bin:$PATH&quot;
+
+
+# maven
+export MAVEN_HOME=&quot;$HOME/Java Development/apache-maven-3.8.8&quot;
+export PATH=&quot;$MAVEN_HOME/bin:$PATH&quot;
+
+export PATH=&quot;/opt/homebrew/opt/openssl@3/bin:$PATH&quot;
+export LDFLAGS=&quot;-L/opt/homebrew/opt/openssl@3/lib&quot;
+export CPPFLAGS=&quot;-I/opt/homebrew/opt/openssl@3/include&quot;
+export PKG_CONFIG_PATH=&quot;/opt/homebrew/opt/openssl@3/lib/pkgconfig&quot;
+
+
+export PATH=&quot;$HOME/bin:$PATH&quot;
+
+export PATH=&quot;/opt/homebrew/bin:$PATH&quot;
+
+
+# Created by `pipx` on 2024-11-09 06:23:41
+export PATH=&quot;$PATH:/Users/couture/.local/bin&quot;
+
+# Python
+export PATH=&quot;$HOME/.pyenv/bin:$PATH&quot;
+eval &quot;$(pyenv init --path)&quot;
+eval &quot;$(pyenv init -)&quot;
+
+# rust
+source $HOME/.cargo/env
+
+# MySQL 
+export PATH=$PATH:/usr/local/mysql/bin
+
+# Go
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOPATH/bin
+
+# Added by LM Studio CLI (lms)
+export PATH=&quot;$PATH:/Users/couture/.lmstudio/bin&quot;
+
+# Added by Antigravity
+export PATH=&quot;/Users/couture/.antigravity/antigravity/bin:$PATH&quot;
+
+</code></pre>
+<p><code>.zprofile</code>:</p>
+<pre><code class="language-bash">eval &quot;$(/opt/homebrew/bin/brew shellenv)&quot;
+
+# Created by `pipx` on 2024-11-09 06:23:41
+export PATH=&quot;$PATH:/Users/couture/.local/bin&quot;
+
+# Setting PATH for Python 3.11
+# The original version is saved in .zprofile.pysave
+PATH=&quot;/Library/Frameworks/Python.framework/Versions/3.11/bin:${PATH}&quot;
+export PATH
+
+# Added by OrbStack: command-line tools and integration
+# This won&#x27;t be added again if you remove it.
+source ~/.orbstack/shell/init.zsh 2&gt;/dev/null || :
+
+</code></pre>
+<p><code>.zshenv</code>:</p>
+<pre><code class="language-bash">. &quot;$HOME/.cargo/env&quot;
+</code></pre>
+<p> 优化以后的输出结果</p>
+<pre><code class="language-bash"># [1] Powerlevel10k Instant Prompt (必须放在文件最开头)
+if [[ -r &quot;${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh&quot; ]]; then
+  source &quot;${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh&quot;
+fi
+
+# [2] 基础环境变量与 PATH 优化 (合并所有 PATH 设置)
+# Homebrew (首先加载，确保基础命令可用)
+eval &quot;$(/opt/homebrew/bin/brew shellenv)&quot;
+
+# 定义路径变量
+export GOPATH=&quot;$HOME/go&quot;
+export MAVEN_HOME=&quot;$HOME/Java Development/apache-maven-3.8.8&quot;
+
+# 编译器标志 (OpenSSL)
+export LDFLAGS=&quot;-L/opt/homebrew/opt/openssl@3/lib&quot;
+export CPPFLAGS=&quot;-I/opt/homebrew/opt/openssl@3/include&quot;
+export PKG_CONFIG_PATH=&quot;/opt/homebrew/opt/openssl@3/lib/pkgconfig&quot;
+
+# 批量构建 PATH (注意顺序：自定义 &gt; Homebrew &gt; 系统)
+# 包含: Node@20, OpenJDK@17, Maven, MySQL, Go, LM Studio, Antigravity, User Bins
+path=(
+  &quot;$HOME/bin&quot;
+  &quot;$HOME/.local/bin&quot;
+  &quot;/opt/homebrew/opt/node@20/bin&quot;
+  &quot;/opt/homebrew/opt/openjdk@17/bin&quot;
+  &quot;$MAVEN_HOME/bin&quot;
+  &quot;/usr/local/mysql/bin&quot;
+  &quot;$GOPATH/bin&quot;
+  &quot;$HOME/.pyenv/bin&quot;
+  &quot;$HOME/.lmstudio/bin&quot;
+  &quot;/Users/couture/.antigravity/antigravity/bin&quot;
+  &quot;/Library/Frameworks/Python.framework/Versions/3.11/bin&quot;
+  $path
+)
+export PATH
+
+# [3] Oh My Zsh 配置
+export ZSH=&quot;$HOME/.oh-my-zsh&quot;
+ZSH_THEME=&quot;powerlevel10k/powerlevel10k&quot;
+# 禁用自动更新检查 (提升启动速度)
+zstyle &#x27;:omz:update&#x27; mode disabled 
+# 禁用魔法函数 (解决粘贴 URL 问题)
+DISABLE_MAGIC_FUNCTIONS=&quot;true&quot;
+
+# 插件加载 (注意：过多插件会拖慢速度，当前保留了你原本的)
+plugins=(git autojump zsh-autosuggestions zsh-syntax-highlighting)
+
+source $ZSH/oh-my-zsh.sh
+
+# [4] 懒加载优化 (Lazy Loading) - 极大提升速度的关键
+# 只有当你输入 jenv 或 java 相关命令时，才会初始化 jenv
+if [ -d &quot;$HOME/.jenv&quot; ]; then
+  export PATH=&quot;$HOME/.jenv/bin:$PATH&quot;
+  function jenv() {
+    unset -f jenv
+    eval &quot;$(jenv init -)&quot;
+    jenv &quot;$@&quot;
+  }
+fi
+
+# 只有当你输入 pyenv 时才初始化 (常规 python 命令走 PATH 即可)
+if command -v pyenv 1&gt;/dev/null 2&gt;&amp;1; then
+  function pyenv() {
+    unset -f pyenv
+    eval &quot;$(pyenv init --path)&quot;
+    eval &quot;$(pyenv init -)&quot;
+    pyenv &quot;$@&quot;
+  }
+fi
+
+# Rust (Cargo) 保持标准加载，速度通常很快
+[[ -f &quot;$HOME/.cargo/env&quot; ]] &amp;&amp; . &quot;$HOME/.cargo/env&quot;
+
+# OrbStack
+[[ -f ~/.orbstack/shell/init.zsh ]] &amp;&amp; source ~/.orbstack/shell/init.zsh 2&gt;/dev/null || :
+
+# [5] P10k 配置文件
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+</code></pre>
+<p> 现在打开终端以后打开的速度瞬间打开，启用优化后的环境变量以后，用<code>source</code>命令进行刷新，如果对AI不放心我采取的是给自己原来配置的环境变量进行备份。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/29/"/><category term="技术"/><published>2026-01-10T06:33:47+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/27/</id><title>7年再聚</title><updated>2025-12-28T06:24:44+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>人生不相见，动如参与商</p>
+</blockquote>
+<p> 小学同学，高中同学，至今7年，我们没有见面，中间过年的时候好多次喊我去聚会，我们始终没有见面，他来杭州工作了，昨天晚上我们见面吃了一顿饭，变化真的太快了， 这几年他也是经历了很多，我们相互聊了很多，从最好的学生时代，再到现在为了生活奔波的我们，把酒言欢，临近年末很很多同学因为冲业绩暂时也没能相聚，以后都有机会，下一次聚会应该不会是7年了， 高中毕业大家说十年再相聚，还有3年了，时间啊，请你慢些脚步吧~</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/c80b31c603032b8c417f8a05cb4cda2f.jpg" alt="" /></p>
+]]></content><link href="https://blog.xcouture.cc/posts/27/"/><category term="杂记"/><published>2025-12-28T06:24:44+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/26/</id><title>明年今日</title><updated>2025-12-24T03:54:04+00:00</updated><content type="html"><![CDATA[<p>明年今日的时候，我在看到这篇博客的时候，我已经对笔试胸有成竹，通过了ZJU的初试。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/26/"/><category term="随笔"/><published>2025-12-24T03:53:18+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/24/</id><title>Zstack BUG</title><updated>2025-12-09T08:36:28+00:00</updated><content type="html"><![CDATA[<p>在 zstack 5.3.40 版本中，Ubuntu镜像不能安装自带的插件，否则云主机在手动下发IP地址的时候不能进行下发地址。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/24/"/><category term="技术"/><published>2025-12-09T08:36:28+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/23/</id><title>IPv6小记</title><updated>2025-12-05T02:01:05+00:00</updated><content type="html"><![CDATA[<p> 最近在调试单位的IPv6的网络，运营商对专线的方式和普通家用方式是完全不一样的了，大多数情况，运营商给的IPv6的下发方式有两种：</p>
+<ol>
+<li>交换模式，业务地址段 IPv6网关在运营商骨干路由器上，二层透传到客户端。</li>
+<li>路由模式，业务地址段 IPv6网关在客户内部网络，运营商与客户路由器通过互联地址互联，业务地址段通过互联，静态路由下指到客户侧。</li>
+</ol>
+<p> 这两种方式都是可以打通网络的，用户侧这里配置没有问题的情况下，就不会有太大的问题，当然这里说的只是一般情况，我就遇到这个特殊的情况：</p>
+<p> 运营商给的是交换模式，这种情况在用户侧的出口防火墙配置，配置好了，但是发现就是不通，然后采取了第二种方式，用路由模式，进行配置以后，网络直接通了，IPv4和IPv6的速率可以保持一致了，测试结果如下：</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/a6a6e69c0c50488231a84461b2938846.png" alt="" /></p>
+]]></content><link href="https://blog.xcouture.cc/posts/23/"/><category term="技术"/><published>2025-12-05T02:01:05+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/22/</id><title>月亮在看着我</title><updated>2025-10-16T05:06:53+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>生前一杯茶，抵过死后万两金。</p>
+</blockquote>
+<p> 十一假期，姥姥走了，人这一生可能就是这样，两个女儿一个儿子，最后都没有赶上见老人家最后一面，这一辈子也是吃了不少苦，特别是耳朵的听力，成为我姥姥这一辈子的羁绊。</p>
+<p> 记得小时候我父亲因为车祸，我寄住于各个亲戚家里，当然在我姥姥那里待的时间是最长的，三个月时间，我差别不多60天的时间都是待在姥姥家里，姥姥很溺爱自己的孩子，那时候我和我表哥不管是有犯了什么错误，从来没有说过我们，每次去她哪里的时候都会给最好的留给孩子，上班以后每年的回家次数相对来说就少了很多，特别是今年，今年在此之前一次都还没有回过老家，记得过年走的时候，姥姥拉着我的手：“外甥，你啥时候会再来？”，我当时脱口而出，端午节就回来，姥姥笑着和我说：“好”。没想到这一走尽是成了最后一面，这一面是开心的，再见却是遗憾的...姥姥的下葬刚好赶上中秋节，我两夜几乎没有睡觉，望着天上的月亮，人有悲欢离合，月有阴晴圆缺，这不就是人生的写照吗，写到这里面的眼泪已经开始眼睛里面转动了，快要溢出，可能人生就是这样，做好当下，常回家看看。</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/moon.jpg" alt="" /></p>
+<p> 看这月光，这是姥姥，在看着我~~~</p>
+]]></content><link href="https://blog.xcouture.cc/posts/22/"/><category term="杂记"/><published>2025-10-16T05:06:53+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/21/</id><title>mac使用IE浏览器</title><updated>2025-09-22T04:06:34+00:00</updated><content type="html"><![CDATA[<p>打开开发者模式，使用的代码是</p>
+<pre><code class="language-bash">Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1；WOW64; Trident/5.0）
+</code></pre>
+<p>填入到其他里面，然后在使用软件的时候进行选中即可。</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20250922120338795.png" alt="" /></p>
+]]></content><link href="https://blog.xcouture.cc/posts/21/"/><category term="技术"/><published>2025-09-22T04:06:09+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/20/</id><title>利用clash代理ATrust</title><updated>2025-09-14T07:24:33+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>折腾仅仅不是为了喜欢，而是更好的实现自己的需求。</p>
+</blockquote>
+<p> 最近发现深信服<code>ATrust</code>这个软件有点变态，可能是因为网络隧道软件都需要拿去root权限，但是你拿到root权限我能理解，但是不让我关闭是什么意思，然后就开始让我产生了要给这个软件替换掉的想法，我找了很多方式好像都不能给这个软件给替换掉，既然无法替换，我就像能不能通过虚拟机的方式进行跑呢，开虚拟机也不是不可以，但是我的电脑内存只有16G,如果虚拟机开起来，看似解决问题，但是笔记本的电量疯狂的掉，于是去GitHub上面开始找解决方案，还真的有大佬给atrust这个软件打包好了docker的形式，然后就有了想法。</p>
+<p> 看到issues里面有人提到了，通过clash代理访问校园网，那不正是我的业务需求吗，然后就开始用docker的形式，我的电脑是m1pro，docker我是通过OrbStack管理，通过OrbStack的好处就是占用很低，我的docker运行命令如下，必须要开启tun模式：</p>
+<pre><code class="language-bash">docker run --rm --device /dev/net/tun --cap-add NET_ADMIN -ti -e PASSWORD=xxxx -e URLWIN=1 -v $HOME/.atrust-data:/root -p 127.0.0.1:5901:5901 -p 127.0.0.1:1080:1080 -p 127.0.0.1:8888:8888 -p 127.0.0.1:54631:54631 --sysctl net.ipv4.conf.default.route_localnet=1 hagb/docker-atrust
+</code></pre>
+<p> 其实整个运行的命令就是参考<a href="https://github.com/docker-easyconnect/docker-easyconnect">docker-easyconnect</a>项目的运行命令，具体参数就可以参考项目的文档，根据自己的需求改改，mac自带的有vnc链接，<code>vnc://127.0.0.1:5901</code>回车就行，密码是xxxx，这些都可以根据你的实际需求进行修改，然后需要在clash配置文件中这样修改：</p>
+<pre><code class="language-yml">- name: 内网
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+    udp: true
+    
+proxy-groups:
+  - name: 内网代理
+    type: select
+    proxies: 
+      - 直连
+      - 内网
+      
+nameserver-policy:
+   https:// xxx.xxx.xx:  # 这里就是你内外的sslvpn的地址
+      - https://doh.pub/dns-query
+    &quot;xxxx.xxx.xxx&quot;:  # 访问域名
+      - x.x.x.x     # 你内网dns，有的没有就不需要
+      
+rules:
+  - DOMAIN,xx.xx.xx.xx,DIRECT
+  - IP-CIDR,192.168.0.0/8,内网代理,no-resolve # 仅仅举例，根据实际内网网段进行修改
+  - DOMAIN-SUFFIX,xx.xx.xx,内网代理       # 内网的域名 xx.xx.xx
+</code></pre>
+<p> 以上就是我内网的配置，我是按照我的实际需求进行修改的，可根据实际需求进行修改。</p>
+<p> 代理工具我是<a href="https://github.com/mihomo-party-org/clash-party">clash-party</a>，感觉还挺好用，推荐一下。</p>
+<p> 最后鸣谢这<a href="https://github.com/docker-easyconnect/docker-easyconnect">docker-easyconnect</a>、<a href="https://github.com/mihomo-party-org/clash-party">clash-party</a>这两个开源项目，以及对项目所有贡献的开发者们。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/20/"/><category term="技术"/><published>2025-09-14T07:24:33+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/19/</id><title>docker网络配置</title><updated>2025-09-13T01:35:10+00:00</updated><content type="html"><![CDATA[<p>IPv4和IPv6都开启的情况</p>
+<pre><code class="language-json">{
+  &quot;registry-mirrors&quot; : [
+    &quot;https:\/\/docker.1ms.run&quot;,
+    &quot;https:\/\/docker.m.daocloud.io&quot;
+  ],
+  &quot;insecure-registries&quot; : [
+    &quot;https:\/\/docker.1ms.run&quot;,
+    &quot;https:\/\/docker.m.daocloud.io&quot;
+  ],
+  &quot;default-address-pools&quot; : [
+    {
+      &quot;base&quot; : &quot;172.16.0.0\/16&quot;,
+      &quot;size&quot; : 24
+    },
+    {
+      &quot;base&quot; : &quot;fd07:b51a:cc66:d000::\/56&quot;,
+      &quot;size&quot; : 64
+    }
+  ],
+  &quot;ipv6&quot; : true,
+  &quot;fixed-cidr-v6&quot; : &quot;fd00:db8:1::\/64&quot;,
+  &quot;bip&quot; : &quot;172.16.0.1\/24&quot;
+}
+</code></pre>
+]]></content><link href="https://blog.xcouture.cc/posts/19/"/><category term="技术"/><published>2025-09-13T01:34:03+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/18/</id><title>解决mac弹出关于本机的bug</title><updated>2025-08-10T06:48:38+00:00</updated><content type="html"><![CDATA[<p> 之前一直遇到这么一个问题，就是在mac下面打字的时候莫名其妙的会遇到弹窗。</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/image-20250810142624282.png" alt="" /></p>
+<p> 弹窗就是如上图所示，一直没有找到解决问题的原因，然后我去<a href="https://v2ex.com/t/1151012?p=1#reply12">v2ex</a>上面发了一篇贴子，咨询关于这个问题，最后终于得到解决方式，就是 <code>Bartender 5</code> 这个软件的问题，升级到最新版本或者是删除问题就解决了。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/18/"/><category term="杂记"/><published>2025-08-10T06:48:38+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/17/</id><title>湖州</title><updated>2025-07-30T01:49:29+00:00</updated><content type="html"><![CDATA[<p> 从老家到杭州，每次都是路过湖州，但是没有正真的来玩过，这次好不容易来湖州玩几天，没想到遇到了台风天气，前两天还行，去了莲花庄，双林古镇，参观了《典籍里的中国》陈列馆，最后还去了湖州古镇，看了《最美太湖》的表演，水上打铁花，以及最后的烟花，因为跟团的，整个过程感觉就是快节奏的，总体来说还是挺好玩的，对于这次的旅行对于内心来说是五味杂陈吧（后面的博客再续），其他的我觉得没有什么特别好记录的，放一些照片在上面吧。</p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/8d08df258d3824e683e1481f68ee6a5d.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/ab58e93e4c73d76e6f67a16d56fc950d.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/d3e96df3419512aabbe039e594d8b780.jpg" alt="" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/img/277b5e4704d5befa46b2668491262fd7.jpg" alt="" /></p>
+]]></content><link href="https://blog.xcouture.cc/posts/17/"/><category term="杂记"/><published>2025-07-30T01:49:29+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/16/</id><title>外网监控网页注意端口</title><updated>2025-07-27T06:43:26+00:00</updated><content type="html"><![CDATA[<p>遇到一个监控网站一直发短信的问题，一会回复一会儿正常，但是这个网站不管是内网还是是外网打开都是正常的，然后进入网站的监控平台一看，<a href="http://xxx.com">http://xxx.com</a> 这样看上去好像也是没啥问题，但是网站本身为了安全是走了433端口，没有开80，所以要在监控网站的平台上需要修改成 <a href="https://xxx.com">https://xxx.com</a> 然后就收到网站恢复正常的通知，bug解决了。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/16/"/><category term="技术"/><published>2025-07-27T06:43:26+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/15/</id><title>项目主观评分</title><updated>2025-07-22T10:15:35+00:00</updated><content type="html"><![CDATA[<p> 关于公开项目评标在主观分上，尽可能需要设置评分标准的人多设置几个，避免选项只有0和其他，否则打分是要写说明的。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/15/"/><category term="随笔"/><published>2025-07-22T10:15:35+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/14/</id><title>知否</title><updated>2025-07-11T05:43:04+00:00</updated><content type="html"><![CDATA[<p>​	好久没有写博客了， 最近这段时间的我去干嘛了呢，当然是去找我人生中的另一半去了，在这段日子里面喜怒哀愁各种都有吧，但是在这其中让我感受最深的是一种特别的<code>illness</code>，<code>depressive disorder（抑郁症）</code>。</p>
+<p>​	对我个人来说，我在此之前也有接触过抑郁症患者，当时的接触让我感觉好像和我们普通人没有区别，但是当我深入接触以后，发现一切没有这么简单，我对于抑郁症患者是表示同情的，因为我查阅了大量的书籍和数据，很多抑郁症的患者都是和童年以及当下的生活状态息息相关，抑郁症当然也有遗传的因素在，但是相对来说是偏少的。经过一段时间的接触，我甚至去想考一个心里咨询师的想法，现在越来越多的学校也好，公益活动活动等，都会设立一个心里咨询站，抑郁症我个人觉得是从心里-&gt;精神-&gt;生理，这一系列相互影响的，可以理解为一个<code>CBT</code>模型，行为、思维、感受三者的一个循环。</p>
+<pre><code class="language-mermaid">graph LR
+    A[外部事件/触发] --&gt; B[行为]
+    B --&gt; C[思维]
+    C --&gt; D[感受]
+    D --&gt; B
+    D --&gt; C
+    B --&gt; D
+    C --&gt; B
+
+    %% 关键注释
+    classDef red fill:#ffcccc,stroke:#f66;
+    classDef green fill:#ccffcc,stroke:#0c0;
+    classDef blue fill:#cce6ff,stroke:#06c;
+    
+    class A red;
+    class B green;
+    class C blue;
+    class D red;
+
+    %% 循环说明
+    subgraph 核心循环
+    B--&gt;C--&gt;D--&gt;B
+    end
+
+    %% 强化标注
+    linkStyle 0,1,2,3 stroke:#333,stroke-width:2px;
+    linkStyle 4,5 stroke:#f66,stroke-width:1px,stroke-dasharray:5;
+</code></pre>
+<p>​	    这种<code>CBT</code>模型也是最基础心理学应用场景，特别是对于抑郁症的人来说，经过我的接触，考虑问题的时候一定要站在他（她）的立场去思考问题，不管这个问题的对错，或者行为的对错，在处理事情的过程中如果你参与了，你觉得这种行为方式是不对的，请你不需要在当时表明你立场，你只需要在旁边的保持沉默即可，千万不能站在对立面，这样会瞬间激发他（她）的情绪，会让他（她）感受到伤害。</p>
+<p>​	    抑郁症给我的个人感觉没有那么可怕，最难的是让我觉得如何帮助一个人状态走向正轨，摆脱心里和生理带来的伤害。从用药的减少到彻底剥脱药物，从一开始的躯体表现，到回归正常生活，从心里阴影到不再复发，这些东西我觉得不仅仅是心里医生或者是精神医生去研究的东西，而是我觉得我们每个人都应该学习的东西，不仅仅是为了他人，也是为了自己。</p>
+<p>​	心灵就像是大海一样，蔚蓝浩瀚和波涛汹涌，希望每个人都能早日战胜自己的心魔，走出困境。</p>
+<p>​															杭州.萧山</p>
+<p>​															2025.7.11 中午</p>
+]]></content><link href="https://blog.xcouture.cc/posts/14/"/><category term="杂记"/><published>2025-07-11T05:43:04+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/13/</id><title>IPv6的一个小TIP</title><updated>2025-05-14T13:45:54+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>纸上得来终觉浅，绝知此事要躬行</p>
+</blockquote>
+<p> 今天和一个工程师探讨了一个IPv6的问题，IPV6对于设备分为两种的状态：</p>
+<ul>
+<li>IPV6有状态</li>
+<li>IPv6无状态</li>
+</ul>
+<p> 有状态：安卓手机是不支持有状态的，手机无法直接获取到IPv6地址，但是iOS可以。</p>
+<p> 无状态：安卓和苹果都是支持的，隔一段时间IPv6地址就会变。</p>
+<p> 有状态可以理解为固定IP地址，无状态可以理解为不固定IP地址，IPv6地址会变动。</p>
+<p> 如果想所有设备出局都走IPv6，可以无线做IPV4隧道，在AC做4 to 6就可以。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/13/"/><category term="技术"/><published>2025-05-14T13:45:54+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/12/</id><title>一个IP冲突场景的解决方案</title><updated>2025-05-12T10:47:30+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>在生产场景中Vcenter遇到到一个因为docker内网地址和园区内网地址冲突了（当时规划的有问题），然后便有了解决方案和触发方式。</p>
+</blockquote>
+<h3><strong>1. Docker 业务与园区网络会冲突吗？</strong></h3>
+<p><strong>不会直接冲突</strong>，但需注意 NAT 和路由规则。</p>
+<ul>
+<li>
+<p><strong>原因</strong>：<br />
+Docker 容器的 IP 属于<strong>虚拟机内部的私有网络</strong>，默认通过 NAT（网络地址转换）与外部通信。<br />
+当容器访问校园网或互联网时，流量会经过宿主机的 IP（即虚拟机的 IP）进行转发，因此：</p>
+<ul>
+<li>校园网看到的流量源是<strong>虚拟机的 IP</strong>，而非 Docker 容器的内部 IP。</li>
+<li>Docker 容器的私有 IP 不会暴露到校园网中，因此<strong>不会与校园网设备 IP 冲突</strong>。</li>
+</ul>
+</li>
+<li>
+<p><strong>例外情况</strong>：<br />
+如果 Docker 容器配置为<strong>桥接模式</strong>（直接使用宿主机网络），则容器的 IP 需要与校园网在同一物理网络中。此时若 Docker 的 IP 段与校园网冲突，才会导致问题（与之前的问题相同）。</p>
+</li>
+</ul>
+<hr />
+<h3><strong>2. 两个虚拟机之间的 Docker 业务会冲突吗？</strong></h3>
+<p><strong>可能会冲突</strong>，具体取决于虚拟机之间的网络架构。</p>
+<h4><strong>(1) 虚拟机网络隔离（默认情况）</strong></h4>
+<ul>
+<li>
+<strong>如果两个虚拟机通过 NAT 或独立网络隔离</strong>（例如 VMware/VirtualBox 的默认 NAT 模式）：  <ul>
+<li>每个虚拟机的 Docker 网络是独立的，彼此不可见。</li>
+<li>即使 Docker 使用相同的 IP 段（如 <code>10.0.0.0/24</code>），它们的 IP 地址仅在各自虚拟机内部有效。</li>
+<li><strong>结论</strong>：虚拟机之间的 Docker 业务<strong>不会冲突</strong>。</li>
+</ul>
+</li>
+</ul>
+<h4><strong>(2) 虚拟机处于同一物理网络（例如桥接模式）</strong></h4>
+<ul>
+<li>
+<strong>如果两个虚拟机通过桥接模式连接到物理网络</strong>（例如直接使用校园网的物理网卡）：  <ul>
+<li>虚拟机本身会被分配校园网的 IP（如 <code>172.16.x.x</code>）。</li>
+<li>Docker 容器的流量通过宿主机的 NAT 转发，因此容器 IP 仍不会暴露到物理网络中。</li>
+<li><strong>结论</strong>：虚拟机之间的 Docker 业务<strong>不会冲突</strong>。</li>
+</ul>
+</li>
+</ul>
+<h4><strong>(3) 虚拟机之间直接通信（例如 Host-Only 或自定义网络）</strong></h4>
+<ul>
+<li>
+<strong>如果两个虚拟机通过 Host-Only 或自定义网络互联</strong>：  <ul>
+<li>
+若两个 Docker 环境使用相同的 IP 段（如 <code>10.0.0.0/24</code>），且虚拟机之间直接路由流量到对方 Docker 网络：  <ul>
+<li>当两个 Docker 容器使用相同的 IP（如 <code>10.0.0.2</code>）时，会发生 <strong>IP 冲突</strong>，导致通信混乱。</li>
+<li>例如：VM1 的容器 <code>10.0.0.2</code> 可能被误认为是 VM2 的容器 <code>10.0.0.2</code>。</li>
+</ul>
+</li>
+<li><strong>结论</strong>：若存在 IP 重复且网络互通，则<strong>会冲突</strong>。</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h3><strong>3. 冲突场景总结</strong></h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>是否冲突</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Docker 访问校园网</td>
+<td>否</td>
+<td>Docker 流量通过 NAT 转发，IP 不暴露</td>
+</tr>
+<tr>
+<td>虚拟机默认隔离</td>
+<td>否</td>
+<td>各虚拟机 Docker 网络独立</td>
+</tr>
+<tr>
+<td>虚拟机桥接物理网络</td>
+<td>否</td>
+<td>Docker 仍通过 NAT 隔离</td>
+</tr>
+<tr>
+<td>虚拟机互联 + IP 重复</td>
+<td>是</td>
+<td>IP 地址在互联网络中重复，导致路由混淆</td>
+</tr>
+</tbody></table><hr />
+<h3><strong>4. 解决方案</strong></h3>
+<h4><strong>(1) 保持默认配置（推荐）</strong></h4>
+<ul>
+<li>如果虚拟机之间不需要直接访问对方的 Docker 容器，保持默认的 NAT 网络模式即可，无需修改配置。</li>
+</ul>
+<h4><strong>(2) 为每个虚拟机分配不同 Docker 网段</strong></h4>
+<p>若需要虚拟机之间互联且访问对方的 Docker 容器，可为每个 Docker 环境分配<strong>不同的私有网段</strong>：</p>
+<ul>
+<li><strong>VM1 的 Docker</strong>：<code>10.0.1.0/24</code></li>
+<li><strong>VM2 的 Docker</strong>：<code>10.0.2.0/24</code></li>
+</ul>
+<h4><strong>(3) 使用 Docker Overlay 网络（跨主机通信）</strong></h4>
+<p>如果需要在多个虚拟机之间构建容器集群（如 Kubernetes），可使用 Docker 的 <strong>Overlay 网络</strong>，自动管理跨主机通信和 IP 分配：</p>
+<pre><code class="language-bash"># 在 Swarm 模式下创建 Overlay 网络
+docker network create --driver overlay my_overlay_net
+</code></pre>
+<h4><strong>(4) 避免手动指定重复 IP</strong></h4>
+<p>若需手动管理容器 IP，确保不同虚拟机中的容器 IP 不重复：</p>
+<pre><code class="language-bash">docker run --ip 10.0.0.100 ...
+</code></pre>
+<hr />
+<h3><strong>5. 验证方法</strong></h3>
+<ul>
+<li>
+<strong>查看容器 IP</strong>：<pre><code class="language-bash">docker inspect &lt;容器ID&gt; | grep IPAddress
+</code></pre>
+</li>
+<li>
+<strong>测试跨虚拟机通信</strong>：<pre><code class="language-bash"># 在 VM1 中 ping VM2 的容器 IP（需确保网络互通）
+docker run --rm alpine ping &lt;VM2容器IP&gt;
+</code></pre>
+</li>
+</ul>
+<hr />
+<h3><strong>总结</strong></h3>
+<ul>
+<li><strong>与校园网的冲突</strong>：只要 Docker 不使用校园网的 IP 段，默认不会冲突。</li>
+<li><strong>虚拟机间冲突</strong>：仅在虚拟机互联且 Docker 使用相同 IP 段时可能发生。通过隔离网络或分配不同网段即可规避。</li>
+</ul>
+]]></content><link href="https://blog.xcouture.cc/posts/12/"/><category term="技术"/><published>2025-05-12T10:47:05+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/11/</id><title>Running</title><updated>2025-05-08T11:18:25+00:00</updated><content type="html"><![CDATA[<p> 中午休息的时候没什么事情，对自己的跑步页面进行更新，与其说是更新，更不如说直接拿着大佬更新好的代码，然后自己进行CV，这样进行更新，今年的自己的目标是1000公里，截止到目前，我跑了不到100公里，距离自己的目标还是相差很远，
+<img src="https://github.com/user-attachments/assets/fa4ae24e-bc1e-4882-9bf9-98d25ec25daf" alt="Image" />
+ 感觉自己现在是堕落了，没有一个很强的意志力去坚持，前几天去爬山，明显感觉自己的腿部力量和核心力量在下降，髂胫束开始有些疼，之前我跑了500公里都没有疼过，没想到爬山还没有爬完就开始疼了。终究还是自己的肌肉群下去了，肌肉就是这样用进废退罢了。
+<img src="https://github.com/user-attachments/assets/ba58e752-f76f-4614-96fd-85de5739bd23" alt="Image" />
+ 自己确实也要拾起来了，早睡早起进行跑步，或者是晚上进行跑步，多种方式，但是终究还是需要自己去坚持的，希望有一天我能跑到10000公里，那一天很快，也很长。
+ 烦心的事情自己就不去想了，随遇而安~</p>
+]]></content><link href="https://blog.xcouture.cc/posts/11/"/><category term="随笔"/><published>2025-05-08T11:14:33+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/10/</id><title>喝大学室友的喜酒</title><updated>2025-09-29T04:49:54+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>男人的一生情谊有三种：同过窗，扛过枪，嫖过娼，当然我与室友的情谊就是第一种。</p>
+</blockquote>
+<p>​	我的大学室友是六个人，当时分寝室的室友是按照专业分的，后面我们进行班级划分的时候，我们是按照寝室进行划分的，所以大学四年我们都在同一个寝室。大家的关系也都玩的也很好，离校前夕，彻夜畅谈，当时主要的话题就是我们这些人谁会第一个结婚，都认为自己肯定不是第一个，没有想到一别就是三年，他去年这个时候相亲，今年结婚了。</p>
+<p>​	他老家在新乡长垣县，我从信阳做高铁先去郑州，其他的几个要去的同学在郑州集合，但是工作原因，有两个室友没能来，都是为了生活而奔波，缺少一些遗憾吧。关于郑州，其实这座城市是又爱又恨，三年没有来，很多东西都变了， 最明显感受的就是没有当年那么乱了，糊辣汤和烩面还是郑州的特色，晚上几个人在郑州需要过夜，吃饭我特意点了一碗烩面，还是当年熟悉的味道，可能对于不喜欢吃面的人来说，郑州不是一座特别好的城市了，相比于杭州，郑州好吃的面可太多了，各种各样的面食。晚上住了一个电竞酒店，就是为了在一起聊聊，吹吹牛逼，但是再也找不到大学的时候那种激情与理想抱负。经历了社会三年的洗礼，都有了自己的想法。</p>
+<p>​	第二天（正月十一）一大早，高铁从郑州东出发直接去新乡了，下了高铁室外温度-15°C，刚好赶上今年最冷的天气，室友已经安排好车过来接了。直接给我们拉到住的酒店，行李放了以后他直接过来接去了他老家，看到墙上贴的结婚海报，发自内心的祝福，幸福啊~，下午和他一起去他媳妇家里拉了嫁妆，第一次参加这种习俗活动，感觉还挺有意思的，然后就是拿东西，他作为东家去的人每人发了一包喜烟，东西拿上车然后跟车回来就结束了。到了晚上在婚礼酒店等着彩排，我有幸作为伴郎，一直等到晚上七点才进行彩排，其实内容也不是很多，根据主持人的安排就行了，在出场之前，伴娘和伴郎按照顺序出场从T台走一圈即可。排练结束以后，一起吃饭，因为不会喝酒，没有喝，吃席主打就是一个吃，饭后回酒店休息了。</p>
+<p>​	正月十二，早上九点我们准时从他老家进行出发接亲，接亲开门也没有那么复杂，“只要红包足够，一切都好说”，当然是开玩笑的，没有一些小插曲，就没有意思了，进门就是做游戏，整个过程还是挺有意思的，然后就是回酒店开始婚礼仪式，这些东西感觉其他地区可能都是大同小异了，有一个陋习（或者是习俗）我是理解不了一点，就是往脸上涂鞋油，这个是什么奇怪的习俗我是第一次见，真的是有些理解不了。整个过程就是欢乐喜庆的。下午吃过席以后，就不让室友送了，其他的同学一起直接就回新乡了，有的坐火车去郑州，我是第二天早上到杭州的高铁，我留下去新乡的胖东来转了一圈，发现胖东来也没有网上说的那么好，主要是人太多了，多到夸张。就简单买了两个他们的特产月饼走匆匆离开了，然后简单吃了一碗烩面，回酒店休息了。第二天一大早回杭州的高铁，至此我的这次喝喜酒之旅结束~</p>
+<p>​	自己也没有多么华丽的文笔，就是简单的记录，结婚算是人的一生最重要的事情之一，愿大家都能找到彼此的幸福！</p>
+<p>​		</p>
+]]></content><link href="https://blog.xcouture.cc/posts/10/"/><category term="随笔"/><published>2025-02-12T07:02:31+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/9/</id><title>关于我的家庭组网</title><updated>2025-01-23T02:09:43+00:00</updated><content type="html"><![CDATA[<h1>关于我的家庭组网</h1>
+<p>​	最近放假回老家，发现网络一直有问题，当然在我写这篇博客的时候还是有问题没有解决。</p>
+<p>​	一开始网路架构是正常的架构：入户光纤-&gt;光猫-&gt;路由器，路由器做AP用，组成了有线mesh，分别是小米的<code>AX1800</code>和<code>AX6000</code>，但是我发现不管是手机<code>ping</code>内网还是电脑<code>ping</code>内网，都是会发生跳<code>ping</code>，非常奇怪，然后我就按照自己的思路先自己排查问题了，网线和水晶头没问题，光衰也是正常，有线和无线都跳<code>ping</code>，按照各位网络大佬的指点，我开始重新组网络。</p>
+<p>​	首先给光猫改成桥接，然后下面加了个软路由，通过软路由进行拨号上网。</p>
+<p>​	其次两个路由器连接软路由，路由改成<code>AP</code>模式，进行有线中继。</p>
+<p>​	最后进行测试，有线网络电脑<code>ping</code>是正常的，不跳<code>ping</code>，但是手机和电脑无线还是跳<code>ping</code>，我尝试修改路由器的信道，但是发现问题还是没有解决。</p>
+<p><img src="https://s3.qjqq.cn/50/6791a43944855.webp%21color" alt="" /></p>
+<p>​	图中就是无线<code>ping</code>的问题，内网发现还是严重跳<code>ping</code>，不知道各位大佬有啥思路和想法让我去排查问题，目前就是能用就行，也没找到这个问题到底是什么产生的，我怀疑是路由器的AP模式问题。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/9/"/><category term="技术"/><published>2025-01-23T02:09:43+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/8/</id><title>2024从那里写呢</title><updated>2025-01-19T02:26:01+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>光阴似箭催人老，日月如梭趱少年。</p>
+</blockquote>
+<p>​	恍恍惚惚又是一年，2024好像自己做了很多事情，又好像什么都没做，工作，生活，学习...这一年自己经历太多了，身边亲人的离世让我真正感受到了，没有什么比健康更重要，我也开始给跑步拾起来，看这自己大学时候的跑步记录，想要达到自己的当时配速和心率比，可能我需要跑1000公里都不一定能回去了，当然目前也是跑了将近600公里，和那时候的自己的心肺功能相差还是很多，初心不忘，贵在坚持，以健康为主。</p>
+<p>​	好记性不如烂笔头，过去年自己也是开始好好写自己的博客，虽然看到这篇文章发现博客没有什么文章，是因为我没有进行迁移，自己的跑步也通过自动化的形式进行展示。感谢<code>GitHub</code>上的开源大佬，对于我在网站部署很大的帮助（文章结尾我会@他们的<code>GitHub</code>地址），很多技术真的感谢开源社区基于了很大的帮助。</p>
+<p>​	钱是活下去和腰杆挺直的资本，过去的一年自己有些时候曾想放弃现在的这份工作，但是现在的就业形式太差了，虽然不挣大钱，但是稳定起码也是能养活自己，工作环境和同事相处都挺好，未来谁知道呢，早点做些准备吧，多考一些有用的证书，对我的当下来说可能更为重要，逼自己走出舒适的圈子。</p>
+<p>​	25年自己想做的事情有很多，希望自己能够真正的沉淀下来，好好打磨自己。关于考研我觉得自己是应该提上日程了，我在纠结这个在职研究生自己读还是不读，如果你也有相同的处境，我倒是希望你可以分享一下你的建议。对于我个人来说脱产去读研不太现实。</p>
+<p>​	说到这里，深夜，我应该是要开始收拾东西了，放假了，有钱没钱回家过年，开始收拾东西，准备回家了。</p>
+<h4>感谢</h4>
+<p>@0x676e67 @yihong0618 @WuLongMiTaoLaiYiDa @mrasong @isYangs @superleeyom @everfu</p>
+]]></content><link href="https://blog.xcouture.cc/posts/8/"/><category term="总结"/><published>2025-01-19T01:48:17+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/7/</id><title>一不留神的网络环路</title><updated>2025-01-14T08:19:44+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>一个小小的操作失误，引发的一次生产事故</p>
+</blockquote>
+<p> 关于在<code>vsphere</code>中给划分的<code>VLAN</code>的网关，作为虚拟机的<code>IP</code>下发了，<code> VLAN</code>号和<code>IP</code>地址都是固定的，导致了一次该网段下面的<code>Linux</code>服务器网络直接发生了环路。但是<code>Windows</code>集群是不受到影响的，遇到这种问题一般都不会想到会是<code>ARP</code>冲突问题，一半都是排查服务器，网络，路由，防火墙等问题，没想到<code>ARP</code>问题，但是最后给<code>VLAN</code>直接删除，但是网络还是正常能通的，这就说明了问题了。<code>ARP</code>冲突，根据<code>mac</code>地址，然后找到对应的那台服务器的，关机（或者是修改IP），然后网络恢复正常。</p>
+<p> 这次网络事故真的是看不起眼的问题，导致了生产事故的产生，真的是吃一堑长一智因为想弄清除问题真正产生的原因，自己也是用<code>AI</code>和浏览器去查询了一下<code>Windows</code>和<code>Linux</code>网络规则，具体可以参考下面说明。</p>
+<p> 这篇博客就到这里，真的是一次很看不眼的问题引起的生产事故，到此这个问题结束，不说了，该收拾东西回家，下班了~</p>
+<p>在给网关配置IP地址时，Linux和Windows的行为差异主要源于两者在网络栈实现和路由处理机制上的不同。以下是对这一问题的详细分析：</p>
+<hr />
+<h3>1. <strong>Linux 的环路问题</strong></h3>
+<p>在Linux中，如果将网关的IP地址配置为本机的一个接口IP，可能会导致路由环路。原因如下：</p>
+<ul>
+<li><strong>路由表处理机制</strong>：
+Linux的路由表会明确指定网关地址，如果网关地址是本机接口IP，数据包会被发送到本机，而不是外部网络。这会导致数据包在本地循环，无法正确转发。</li>
+<li><strong>ARP 请求</strong>：
+当Linux尝试将数据包发送到网关时，会发送ARP请求来解析网关的MAC地址。如果网关IP是本机接口IP，ARP请求会解析到本机，导致数据包被送回本机，形成环路。</li>
+<li><strong>默认行为</strong>：
+Linux默认不会检查网关IP是否为本机接口IP，因此容易因配置错误引发环路。</li>
+</ul>
+<hr />
+<h3>2. <strong>Windows 的环路避免机制</strong></h3>
+<p>Windows在网络栈实现上对网关配置有更强的检查和保护机制，因此不容易出现环路问题。原因如下：</p>
+<ul>
+<li><strong>网关IP检查</strong>：
+Windows在配置网关时会检查网关IP是否为本机接口IP。如果检测到网关IP是本机IP，Windows会拒绝该配置或忽略该网关，从而避免环路。</li>
+<li><strong>路由优先级</strong>：
+Windows的路由表处理机制会优先处理直连路由（即本机接口所在的网络），而不是通过网关转发。如果网关IP是本机接口IP，Windows会优先将数据包发送到本地接口，而不是尝试通过网关转发。</li>
+<li><strong>ARP 处理</strong>：
+Windows的ARP处理机制更加智能，能够避免将网关IP解析为本机MAC地址，从而防止数据包在本地循环。</li>
+</ul>
+<hr />
+<h3>3. <strong>根本原因</strong></h3>
+<ul>
+<li><strong>Linux</strong>：更注重灵活性和可配置性，允许用户自由配置路由和网关，但需要用户对网络配置有深入理解，否则容易引发问题。</li>
+<li><strong>Windows</strong>：更注重用户体验和安全性，内置了许多检查和保护机制，防止用户因配置错误导致网络问题。</li>
+</ul>
+<hr />
+<h3>4. <strong>如何避免Linux中的环路问题</strong></h3>
+<p>如果在Linux中需要避免因网关配置导致的环路问题，可以采取以下措施：</p>
+<ul>
+<li>
+<p><strong>检查网关配置</strong>：确保网关IP不是本机接口IP。</p>
+</li>
+<li>
+<p><strong>使用路由规则</strong>：通过<code>ip route</code>命令明确指定路由规则，避免数据包被错误地发送到本机。</p>
+</li>
+<li>
+<p><strong>启用反向路径过滤（RPF）</strong>：通过<code>sysctl</code>启用反向路径过滤，防止数据包从错误的方向进入系统。</p>
+<p>bash</p>
+<p>复制</p>
+<pre><code>sysctl -w net.ipv4.conf.all.rp_filter=1
+sysctl -w net.ipv4.conf.default.rp_filter=1
+</code></pre>
+</li>
+<li>
+<p><strong>使用防火墙规则</strong>：通过<code>iptables</code>或<code>nftables</code>限制数据包的流向，防止环路。</p>
+</li>
+</ul>
+<hr />
+<h3>总结</h3>
+<p>Windows和Linux在网关IP配置上的行为差异，主要源于两者在网络栈实现和路由处理机制上的不同。Windows通过内置的检查和保护机制避免了环路问题，而Linux则更依赖用户的配置和管理能力。为了避免Linux中的环路问题，用户需要仔细检查网关配置，并采取适当的防护措施。</p>
+]]></content><link href="https://blog.xcouture.cc/posts/7/"/><category term="技术"/><published>2025-01-14T08:19:43+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/6/</id><title>关于我</title><updated>2025-01-09T12:21:40+00:00</updated><content type="html"><![CDATA[<h3>简介</h3>
+<ul>
+<li>座右铭：物来顺应 未来不迎 当时不杂 既过不恋；</li>
+<li>出生：一个土生土长的农村孩子；</li>
+<li>工作：不是当牛马，就在牛马的路上；</li>
+<li>爱好：喜欢运功，喜欢技术。</li>
+</ul>
+<h4>你长得那么好看，谢谢你来看我~</h4>
+]]></content><link href="https://blog.xcouture.cc/posts/6/"/><category term="About Me"/><published>2025-01-09T12:21:40+00:00</published></entry><entry><id>https://blog.xcouture.cc/posts/5/</id><title>建站成功✌️</title><updated>2025-01-07T09:18:53+00:00</updated><content type="html"><![CDATA[<blockquote>
+<p>谨以此篇文章作为建站纪念，感谢所有大佬的帮助，我会在文章结尾提供连接</p>
+</blockquote>
+<p> 经过自己两周的周末时间，终于是给这个通过issues写博客弄好了，前后端分离，都是通过GitHub托管的方式，聊聊一些问题：</p>
+<ul>
+<li>项目主要参考：<a href="https://github.com/superleeyom">superleeyom</a>大佬的博客。</li>
+<li>前后端分离式，前端就是GitHub Page，但是我也进行Vercel部署了，在经过Vercel部署的时候并不是直接导入那么简单，因为引入的是<a href="https://github.com/LoeiFy">LoeiFy</a>大佬的<a href="https://github.com/LoeiFy/Mirror">Mirror</a>项目，很巧妙的用的用Github API 进行调用，这里加密绑定的是域名，如果前端的page直接导入Vercel打开就是没有权限，也不会显示，其实并不操作问题，而是需要对域名进行绑定解析即可。</li>
+<li>后端主要是参考的<a href="https://github.com/yihong0618">yihong0618</a>大佬的<a href="https://github.com/yihong0618/gitblog">gitblog</a>开源项目</li>
+<li>关于页面的魔改，页面的魔改我想用cursor在我index里面加入暗夜模式以及切换按钮，但是AI并不是万能，这里要感谢<a href="https://github.com/isYangs">isYangs</a>大佬对于本博客的暗黑模式提供的大力帮助。</li>
+</ul>
+]]></content><link href="https://blog.xcouture.cc/posts/5/"/><published>2025-01-05T13:49:53+00:00</published></entry></feed>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>关于MosDNS没有轮转机制解决方案 - Couture&#x27;s Blog</title><meta name="description" content="最近在折腾网络过程中，因为采用了 mosdns 进行分流，但是发现突然发现终端设备突然获取不到 IP 地址了，排查了好几天，才发现 MosDNS 没有轮转机,导致我软路由的内存直接溢出，然后借用 codex 写了一个删除日志的机制，摆脱内存溢出的问题。 当前安装的日志保护脚本位于： /usr/sbin/mosdns-l">
+<link rel="canonical" href="https://blog.xcouture.cc/posts/47/"><meta property="og:title" content="关于MosDNS没有轮转机制解决方案 - Couture&#x27;s Blog"><meta property="og:url" content="https://blog.xcouture.cc/posts/47/"><meta property="og:type" content="article"><meta property="article:published_time" content="2026-07-13T13:04:38Z">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
+<script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/base.css"><link rel="stylesheet" href="/assets/theme.css">
+<script src="/assets/runtime.js" defer></script></head><body>
+<button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
+<main class="page"><div><article id="post"><a class="back" href="/" aria-label="返回"><svg xmlns="http://www.w3.org/2000/svg" class="icon" version="1" viewBox="0 0 1024 1024"><path d="M774 467H415l110-108c18-18 18-48 0-66a48 48 0 0 0-67 0L273 475a47 47 0 0 0-11 11 45 45 0 0 0 13 66l183 180c19 18 48 18 67 0 18-18 18-47 0-65L415 559h359c26 0 48-21 48-46s-22-46-48-46zm0 0"/><path d="M512 93a419 419 0 1 1 0 838 419 419 0 0 1 0-838m0-93A509 509 0 0 0 0 512a509 509 0 0 0 512 512 509 509 0 0 0 512-512A509 509 0 0 0 512 0z"/></svg></a><h1>关于MosDNS没有轮转机制解决方案</h1><p>Updated at<span>Jul 13, 2026</span></p><div class="markdown-body"><blockquote>
+<p dir="auto">最近在折腾网络过程中，因为采用了<code class="notranslate">mosdns</code>进行分流，但是发现突然发现终端设备突然获取不到<code class="notranslate">IP</code>地址了，排查了好几天，才发现<code class="notranslate">MosDNS</code>没有轮转机,导致我软路由的内存直接溢出，然后借用<code class="notranslate">codex</code>写了一个删除日志的机制，摆脱内存溢出的问题。</p>
+</blockquote>
+<p dir="auto">当前安装的日志保护脚本位于：</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="/usr/sbin/mosdns-log-guard" dir="auto"><pre class="notranslate">/usr/sbin/mosdns-log-guard</pre></div>
+<p dir="auto">内容如下：</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="#!/bin/sh
+
+LOG_FILE=&quot;${LOG_FILE:-/var/log/mosdns.log}&quot;
+MAX_SIZE=&quot;${MAX_SIZE:-5242880}&quot;
+INTERVAL=&quot;${INTERVAL:-30}&quot;
+
+check_log() {
+	[ -f &quot;$LOG_FILE&quot; ] || return 0
+
+	SIZE=&quot;$(wc -c &lt; &quot;$LOG_FILE&quot; 2&gt;/dev/null)&quot;
+	case &quot;$SIZE&quot; in
+		''|*[!0-9]*) return 0 ;;
+	esac
+
+	if [ &quot;$SIZE&quot; -gt &quot;$MAX_SIZE&quot; ]; then
+		logger -t mosdns-log-guard \
+			&quot;mosdns log reached ${SIZE} bytes; truncating at limit ${MAX_SIZE}&quot;
+		: &gt; &quot;$LOG_FILE&quot;
+	fi
+}
+
+if [ &quot;$1&quot; = &quot;--once&quot; ]; then
+	check_log
+	exit 0
+fi
+
+while true; do
+	check_log
+	sleep &quot;$INTERVAL&quot;
+done" dir="auto"><pre class="notranslate"><span class="pl-c"><span class="pl-c">#!</span>/bin/sh</span>
+
+LOG_FILE=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">${LOG_FILE<span class="pl-k">:-/</span>var<span class="pl-k">/</span>log<span class="pl-k">/</span>mosdns.log}</span><span class="pl-pds">"</span></span>
+MAX_SIZE=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">${MAX_SIZE<span class="pl-k">:-</span>5242880}</span><span class="pl-pds">"</span></span>
+INTERVAL=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">${INTERVAL<span class="pl-k">:-</span>30}</span><span class="pl-pds">"</span></span>
+
+<span class="pl-en">check_log</span>() {
+	[ <span class="pl-k">-f</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$LOG_FILE</span><span class="pl-pds">"</span></span> ] <span class="pl-k">||</span> <span class="pl-k">return</span> 0
+
+	SIZE=<span class="pl-s"><span class="pl-pds">"</span><span class="pl-s"><span class="pl-pds">$(</span>wc -c <span class="pl-k">&lt;</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$LOG_FILE</span><span class="pl-pds">"</span></span> <span class="pl-k">2&gt;</span>/dev/null<span class="pl-pds">)</span></span><span class="pl-pds">"</span></span>
+	<span class="pl-k">case</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SIZE</span><span class="pl-pds">"</span></span> <span class="pl-k">in</span>
+		<span class="pl-s"><span class="pl-pds">'</span><span class="pl-pds">'</span></span>|<span class="pl-k">*</span>[!0-9]<span class="pl-k">*</span>) <span class="pl-k">return</span> 0 ;;
+	<span class="pl-k">esac</span>
+
+	<span class="pl-k">if</span> [ <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SIZE</span><span class="pl-pds">"</span></span> <span class="pl-k">-gt</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$MAX_SIZE</span><span class="pl-pds">"</span></span> ]<span class="pl-k">;</span> <span class="pl-k">then</span>
+		logger -t mosdns-log-guard \
+			<span class="pl-s"><span class="pl-pds">"</span>mosdns log reached <span class="pl-smi">${SIZE}</span> bytes; truncating at limit <span class="pl-smi">${MAX_SIZE}</span><span class="pl-pds">"</span></span>
+		<span class="pl-c1">:</span> <span class="pl-k">&gt;</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$LOG_FILE</span><span class="pl-pds">"</span></span>
+	<span class="pl-k">fi</span>
+}
+
+<span class="pl-k">if</span> [ <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$1</span><span class="pl-pds">"</span></span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>--once<span class="pl-pds">"</span></span> ]<span class="pl-k">;</span> <span class="pl-k">then</span>
+	check_log
+	<span class="pl-c1">exit</span> 0
+<span class="pl-k">fi</span>
+
+<span class="pl-k">while</span> <span class="pl-c1">true</span><span class="pl-k">;</span> <span class="pl-k">do</span>
+	check_log
+	sleep <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$INTERVAL</span><span class="pl-pds">"</span></span>
+<span class="pl-k">done</span></pre></div>
+<p dir="auto">参数含义：</p>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="日志文件：/var/log/mosdns.log
+日志上限：5242880字节，即5 MiB
+检查间隔：30秒"><pre class="notranslate"><code class="notranslate">日志文件：/var/log/mosdns.log
+日志上限：5242880字节，即5 MiB
+检查间隔：30秒
+</code></pre></div>
+<p dir="auto">对应的开机服务位于：</p>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="/etc/init.d/mosdns-log-guard"><pre class="notranslate"><code class="notranslate">/etc/init.d/mosdns-log-guard
+</code></pre></div>
+<p dir="auto">内容如下：</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content='#!/bin/sh /etc/rc.common
+
+START=76
+STOP=10
+USE_PROCD=1
+
+PROG=/usr/sbin/mosdns-log-guard
+
+start_service() {
+	procd_open_instance
+	procd_set_param command "$PROG"
+	procd_set_param respawn 3600 5 5
+	procd_set_param file "$PROG"
+	procd_close_instance
+}' dir="auto"><pre class="notranslate"><span class="pl-c"><span class="pl-c">#!</span>/bin/sh /etc/rc.common</span>
+
+START=76
+STOP=10
+USE_PROCD=1
+
+PROG=/usr/sbin/mosdns-log-guard
+
+<span class="pl-en">start_service</span>() {
+	procd_open_instance
+	procd_set_param <span class="pl-c1">command</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$PROG</span><span class="pl-pds">"</span></span>
+	procd_set_param respawn 3600 5 5
+	procd_set_param file <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$PROG</span><span class="pl-pds">"</span></span>
+	procd_close_instance
+}</pre></div>
+<p dir="auto">手动检查一次可以运行：</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="/usr/sbin/mosdns-log-guard --once" dir="auto"><pre class="notranslate">/usr/sbin/mosdns-log-guard --once</pre></div>
+<p dir="auto">查看服务状态：</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="ubus call service list '{&quot;name&quot;:&quot;mosdns-log-guard&quot;}'" dir="auto"><pre class="notranslate">ubus call service list <span class="pl-s"><span class="pl-pds">'</span>{"name":"mosdns-log-guard"}<span class="pl-pds">'</span></span></pre></div>
+<p dir="auto">查看是否开机启用：</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="/etc/init.d/mosdns-log-guard enabled" dir="auto"><pre class="notranslate">/etc/init.d/mosdns-log-guard enabled</pre></div>
+<p dir="auto">查看保护服务产生的系统日志：</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="logread | grep mosdns-log-guard" dir="auto"><pre class="notranslate">logread <span class="pl-k">|</span> grep mosdns-log-guard</pre></div></div><div class="labels"><a href="https://github.com/xcouturecc/gitblog/labels/%E6%8A%80%E6%9C%AF">#技术</a></div></article><section id="comments" data-issue="47" aria-label="评论"><div class="comments-actions"><a class="button" href="https://github.com/xcouturecc/gitblog/issues/47#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a></div><div class="comments-list" aria-live="polite"></div></section><footer id="footer">© 2026 Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/xcouturecc/gitblog/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+</body></html>

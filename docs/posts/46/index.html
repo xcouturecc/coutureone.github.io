@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>万象输入方案配置 - Couture&#x27;s Blog</title><meta name="description" content="1.配置文件 自定义配置文件新建 wanxiang.custom.yaml # 万象拼音个人配置 # 用途：整理根目录 wanxiang.custom.yaml，适合 Mac 与 Hamster3 同步使用。 # # 说明： # - patch 下的配置会覆盖/补充 wanxiang.schema.yaml 的对应项。">
+<link rel="canonical" href="https://blog.xcouture.cc/posts/46/"><meta property="og:title" content="万象输入方案配置 - Couture&#x27;s Blog"><meta property="og:url" content="https://blog.xcouture.cc/posts/46/"><meta property="og:type" content="article"><meta property="article:published_time" content="2026-07-07T02:26:07Z">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
+<script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/base.css"><link rel="stylesheet" href="/assets/theme.css">
+<script src="/assets/runtime.js" defer></script></head><body>
+<button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
+<main class="page"><div><article id="post"><a class="back" href="/" aria-label="返回"><svg xmlns="http://www.w3.org/2000/svg" class="icon" version="1" viewBox="0 0 1024 1024"><path d="M774 467H415l110-108c18-18 18-48 0-66a48 48 0 0 0-67 0L273 475a47 47 0 0 0-11 11 45 45 0 0 0 13 66l183 180c19 18 48 18 67 0 18-18 18-47 0-65L415 559h359c26 0 48-21 48-46s-22-46-48-46zm0 0"/><path d="M512 93a419 419 0 1 1 0 838 419 419 0 0 1 0-838m0-93A509 509 0 0 0 0 512a509 509 0 0 0 512 512 509 509 0 0 0 512-512A509 509 0 0 0 512 0z"/></svg></a><h1>万象输入方案配置</h1><p>Updated at<span>Jul 7, 2026</span></p><div class="markdown-body"><h3 dir="auto">1.配置文件</h3>
+<p dir="auto">自定义配置文件新建<code class="notranslate">wanxiang.custom.yaml</code></p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# 万象拼音个人配置
+# 用途：整理根目录 wanxiang.custom.yaml，适合 Mac 与 Hamster3 同步使用。
+#
+# 说明：
+# - patch 下的配置会覆盖/补充 wanxiang.schema.yaml 的对应项。
+# - 这份文件保留全拼、个人短语、候选数量三个稳定项。
+# - 已开启造词功能：适合让常用新词逐渐变顺手。
+
+patch:
+  # 输入方案转写规则。
+  # 当前使用全拼。以后如果输入 /zrm、/flypy、/mspy 等切换双拼，
+  # 万象的 set_schema.lua 会改这里，所以这段应该放在根目录配置里。
+  speller/algebra:
+    __patch:
+      # 可选模糊音示例：需要时取消注释。
+      # - wanxiang_algebra:/模糊音_z_zh
+      - wanxiang_algebra:/base/全拼
+
+  # 个人快捷短语文件。
+  # 对应根目录 custom_phrase_personal.txt。
+  custom_phrase/user_dict: custom_phrase_personal
+
+  # 候选数量。
+  # 当前保留 6 个。万象注释里提示不要超过 6，
+  # 因为 7/8/9/0 还会参与声调或其他输入逻辑。
+  menu/page_size: 6
+
+  # 造词功能。
+  # recognizer/patterns/add_user_dict：允许用 `` 引导造词。
+  # user_dict_set/enable_user_dict：启用已造词的用户词典读取。
+  # add_user_dict/enable_user_dict：启用造词写入用户词典。
+  # add_user_dict/enable_auto_phrase：开启自动无词频造词，让输入越用越顺。
+  recognizer/patterns/add_user_dict: &quot;^``[A-Za-z/`']*$&quot;
+  user_dict_set/enable_user_dict: true
+  add_user_dict/enable_user_dict: true
+  add_user_dict/enable_auto_phrase: true" dir="auto"><pre class="notranslate"><span class="pl-c"><span class="pl-c">#</span> 万象拼音个人配置</span>
+<span class="pl-c"><span class="pl-c">#</span> 用途：整理根目录 wanxiang.custom.yaml，适合 Mac 与 Hamster3 同步使用。</span>
+<span class="pl-c"><span class="pl-c">#</span></span>
+<span class="pl-c"><span class="pl-c">#</span> 说明：</span>
+<span class="pl-c"><span class="pl-c">#</span> - patch 下的配置会覆盖/补充 wanxiang.schema.yaml 的对应项。</span>
+<span class="pl-c"><span class="pl-c">#</span> - 这份文件保留全拼、个人短语、候选数量三个稳定项。</span>
+<span class="pl-c"><span class="pl-c">#</span> - 已开启造词功能：适合让常用新词逐渐变顺手。</span>
+
+<span class="pl-ent">patch</span>:
+  <span class="pl-c"><span class="pl-c">#</span> 输入方案转写规则。</span>
+  <span class="pl-c"><span class="pl-c">#</span> 当前使用全拼。以后如果输入 /zrm、/flypy、/mspy 等切换双拼，</span>
+  <span class="pl-c"><span class="pl-c">#</span> 万象的 set_schema.lua 会改这里，所以这段应该放在根目录配置里。</span>
+  <span class="pl-ent">speller/algebra</span>:
+    <span class="pl-ent">__patch</span>:
+      <span class="pl-c"><span class="pl-c">#</span> 可选模糊音示例：需要时取消注释。</span>
+      <span class="pl-c"><span class="pl-c">#</span> - wanxiang_algebra:/模糊音_z_zh</span>
+      - <span class="pl-s">wanxiang_algebra:/base/全拼</span>
+
+  <span class="pl-c"><span class="pl-c">#</span> 个人快捷短语文件。</span>
+  <span class="pl-c"><span class="pl-c">#</span> 对应根目录 custom_phrase_personal.txt。</span>
+  <span class="pl-ent">custom_phrase/user_dict</span>: <span class="pl-s">custom_phrase_personal</span>
+
+  <span class="pl-c"><span class="pl-c">#</span> 候选数量。</span>
+  <span class="pl-c"><span class="pl-c">#</span> 当前保留 6 个。万象注释里提示不要超过 6，</span>
+  <span class="pl-c"><span class="pl-c">#</span> 因为 7/8/9/0 还会参与声调或其他输入逻辑。</span>
+  <span class="pl-ent">menu/page_size</span>: <span class="pl-c1">6</span>
+
+  <span class="pl-c"><span class="pl-c">#</span> 造词功能。</span>
+  <span class="pl-c"><span class="pl-c">#</span> recognizer/patterns/add_user_dict：允许用 `` 引导造词。</span>
+  <span class="pl-c"><span class="pl-c">#</span> user_dict_set/enable_user_dict：启用已造词的用户词典读取。</span>
+  <span class="pl-c"><span class="pl-c">#</span> add_user_dict/enable_user_dict：启用造词写入用户词典。</span>
+  <span class="pl-c"><span class="pl-c">#</span> add_user_dict/enable_auto_phrase：开启自动无词频造词，让输入越用越顺。</span>
+  <span class="pl-ent">recognizer/patterns/add_user_dict</span>: <span class="pl-s"><span class="pl-pds">"</span>^``[A-Za-z/`']*$<span class="pl-pds">"</span></span>
+  <span class="pl-ent">user_dict_set/enable_user_dict</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">add_user_dict/enable_user_dict</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">add_user_dict/enable_auto_phrase</span>: <span class="pl-c1">true</span></pre></div>
+<p dir="auto">新建配置个人自定义短语文件<code class="notranslate">custom_phrase_personal.txt</code></p>
+<h3 dir="auto">2.同步方案</h3>
+<p dir="auto">采取的是<code class="notranslate">iCloud</code>同步方案，同步<code class="notranslate">sync</code>里面进行配置,最终同步效果如下</p>
+<p dir="auto"><a href="/assets/images/1bfa4476a102f4b56bd9-1400.webp" rel="noopener noreferrer" target="_blank"><img alt="" decoding="async" height="336" loading="eager" sizes="(max-width: 600px) calc(100vw - 40px), 720px" src="/assets/images/1bfa4476a102f4b56bd9-1400.webp" srcset="/assets/images/1bfa4476a102f4b56bd9-800.webp 800w, /assets/images/1bfa4476a102f4b56bd9-1400.webp 1400w" width="1400"/></a></p></div><div class="labels"><a href="https://github.com/xcouturecc/gitblog/labels/%E6%9D%82%E8%AE%B0">#杂记</a></div></article><section id="comments" data-issue="46" aria-label="评论"><div class="comments-actions"><a class="button" href="https://github.com/xcouturecc/gitblog/issues/46#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a></div><div class="comments-list" aria-live="polite"></div></section><footer id="footer">© 2026 Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/xcouturecc/gitblog/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+</body></html>

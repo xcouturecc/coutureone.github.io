@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>利用clash代理ATrust - Couture&#x27;s Blog</title><meta name="description" content="折腾仅仅不是为了喜欢，而是更好的实现自己的需求。 最近发现深信服 ATrust 这个软件有点变态，可能是因为网络隧道软件都需要拿去root权限，但是你拿到root权限我能理解，但是不让我关闭是什么意思，然后就开始让我产生了要给这个软件替换掉的想法，我找了很多方式好像都不能给这个软件给替换掉，既然无法替换，我就像能不能通">
+<link rel="canonical" href="https://blog.xcouture.cc/posts/20/"><meta property="og:title" content="利用clash代理ATrust - Couture&#x27;s Blog"><meta property="og:url" content="https://blog.xcouture.cc/posts/20/"><meta property="og:type" content="article"><meta property="article:published_time" content="2025-09-14T07:24:33Z">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
+<script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/base.css"><link rel="stylesheet" href="/assets/theme.css">
+<script src="/assets/runtime.js" defer></script></head><body>
+<button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
+<main class="page"><div><article id="post"><a class="back" href="/" aria-label="返回"><svg xmlns="http://www.w3.org/2000/svg" class="icon" version="1" viewBox="0 0 1024 1024"><path d="M774 467H415l110-108c18-18 18-48 0-66a48 48 0 0 0-67 0L273 475a47 47 0 0 0-11 11 45 45 0 0 0 13 66l183 180c19 18 48 18 67 0 18-18 18-47 0-65L415 559h359c26 0 48-21 48-46s-22-46-48-46zm0 0"/><path d="M512 93a419 419 0 1 1 0 838 419 419 0 0 1 0-838m0-93A509 509 0 0 0 0 512a509 509 0 0 0 512 512 509 509 0 0 0 512-512A509 509 0 0 0 512 0z"/></svg></a><h1>利用clash代理ATrust</h1><p>Updated at<span>Sep 14, 2025</span></p><div class="markdown-body"><blockquote>
+<p dir="auto">折腾仅仅不是为了喜欢，而是更好的实现自己的需求。</p>
+</blockquote>
+<p dir="auto"> 最近发现深信服<code class="notranslate">ATrust</code>这个软件有点变态，可能是因为网络隧道软件都需要拿去root权限，但是你拿到root权限我能理解，但是不让我关闭是什么意思，然后就开始让我产生了要给这个软件替换掉的想法，我找了很多方式好像都不能给这个软件给替换掉，既然无法替换，我就像能不能通过虚拟机的方式进行跑呢，开虚拟机也不是不可以，但是我的电脑内存只有16G,如果虚拟机开起来，看似解决问题，但是笔记本的电量疯狂的掉，于是去GitHub上面开始找解决方案，还真的有大佬给atrust这个软件打包好了docker的形式，然后就有了想法。</p>
+<p dir="auto"> 看到issues里面有人提到了，通过clash代理访问校园网，那不正是我的业务需求吗，然后就开始用docker的形式，我的电脑是m1pro，docker我是通过OrbStack管理，通过OrbStack的好处就是占用很低，我的docker运行命令如下，必须要开启tun模式：</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="docker run --rm --device /dev/net/tun --cap-add NET_ADMIN -ti -e PASSWORD=xxxx -e URLWIN=1 -v $HOME/.atrust-data:/root -p 127.0.0.1:5901:5901 -p 127.0.0.1:1080:1080 -p 127.0.0.1:8888:8888 -p 127.0.0.1:54631:54631 --sysctl net.ipv4.conf.default.route_localnet=1 hagb/docker-atrust" dir="auto"><pre class="notranslate">docker run --rm --device /dev/net/tun --cap-add NET_ADMIN -ti -e PASSWORD=xxxx -e URLWIN=1 -v <span class="pl-smi">$HOME</span>/.atrust-data:/root -p 127.0.0.1:5901:5901 -p 127.0.0.1:1080:1080 -p 127.0.0.1:8888:8888 -p 127.0.0.1:54631:54631 --sysctl net.ipv4.conf.default.route_localnet=1 hagb/docker-atrust</pre></div>
+<p dir="auto"> 其实整个运行的命令就是参考<a href="https://github.com/docker-easyconnect/docker-easyconnect">docker-easyconnect</a>项目的运行命令，具体参数就可以参考项目的文档，根据自己的需求改改，mac自带的有vnc链接，<code class="notranslate">vnc://127.0.0.1:5901</code>回车就行，密码是xxxx，这些都可以根据你的实际需求进行修改，然后需要在clash配置文件中这样修改：</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content='- name: 内网
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+    udp: true
+    
+proxy-groups:
+  - name: 内网代理
+    type: select
+    proxies: 
+      - 直连
+      - 内网
+      
+nameserver-policy:
+   https:// xxx.xxx.xx:  # 这里就是你内外的sslvpn的地址
+      - https://doh.pub/dns-query
+    "xxxx.xxx.xxx":  # 访问域名
+      - x.x.x.x     # 你内网dns，有的没有就不需要
+      
+rules:
+  - DOMAIN,xx.xx.xx.xx,DIRECT
+  - IP-CIDR,192.168.0.0/8,内网代理,no-resolve # 仅仅举例，根据实际内网网段进行修改
+  - DOMAIN-SUFFIX,xx.xx.xx,内网代理       # 内网的域名 xx.xx.xx' dir="auto"><pre class="notranslate">- <span class="pl-ent">name</span>: <span class="pl-s">内网</span>
+    <span class="pl-ent">type</span>: <span class="pl-s">socks5</span>
+    <span class="pl-ent">server</span>: <span class="pl-s">127.0.0.1</span>
+    <span class="pl-ent">port</span>: <span class="pl-c1">1080</span>
+    <span class="pl-ent">udp</span>: <span class="pl-c1">true</span>
+    
+<span class="pl-ent">proxy-groups</span>:
+  - <span class="pl-ent">name</span>: <span class="pl-s">内网代理</span>
+    <span class="pl-ent">type</span>: <span class="pl-s">select</span>
+    <span class="pl-ent">proxies</span>: 
+      - <span class="pl-s">直连</span>
+      - <span class="pl-s">内网</span>
+      
+<span class="pl-ent">nameserver-policy</span>:
+   <span class="pl-ent">https:// xxx.xxx.xx</span>:  <span class="pl-c"><span class="pl-c">#</span> 这里就是你内外的sslvpn的地址</span>
+      - <span class="pl-s">https://doh.pub/dns-query</span>
+    <span class="pl-s"><span class="pl-pds">"</span><span class="pl-ent">xxxx.xxx.xxx</span><span class="pl-pds">"</span></span>:  <span class="pl-c"><span class="pl-c">#</span> 访问域名</span>
+      - <span class="pl-s">x.x.x.x     </span><span class="pl-c"><span class="pl-c">#</span> 你内网dns，有的没有就不需要</span>
+      
+<span class="pl-ent">rules</span>:
+  - <span class="pl-s">DOMAIN,xx.xx.xx.xx,DIRECT</span>
+  - <span class="pl-s">IP-CIDR,192.168.0.0/8,内网代理,no-resolve </span><span class="pl-c"><span class="pl-c">#</span> 仅仅举例，根据实际内网网段进行修改</span>
+  - <span class="pl-s">DOMAIN-SUFFIX,xx.xx.xx,内网代理       </span><span class="pl-c"><span class="pl-c">#</span> 内网的域名 xx.xx.xx</span></pre></div>
+<p dir="auto"> 以上就是我内网的配置，我是按照我的实际需求进行修改的，可根据实际需求进行修改。</p>
+<p dir="auto"> 代理工具我是<a href="https://github.com/mihomo-party-org/clash-party">clash-party</a>，感觉还挺好用，推荐一下。</p>
+<p dir="auto"> 最后鸣谢这<a href="https://github.com/docker-easyconnect/docker-easyconnect">docker-easyconnect</a>、<a href="https://github.com/mihomo-party-org/clash-party">clash-party</a>这两个开源项目，以及对项目所有贡献的开发者们。</p></div><div class="labels"><a href="https://github.com/xcouturecc/gitblog/labels/%E6%8A%80%E6%9C%AF">#技术</a></div></article><section id="comments" data-issue="20" aria-label="评论"><div class="comments-actions"><a class="button" href="https://github.com/xcouturecc/gitblog/issues/20#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a></div><div class="comments-list" aria-live="polite"></div></section><footer id="footer">© 2026 Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/xcouturecc/gitblog/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+</body></html>

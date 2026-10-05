@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPv6小记 - Couture&#x27;s Blog</title><meta name="description" content="最近在调试单位的IPv6的网络，运营商对专线的方式和普通家用方式是完全不一样的了，大多数情况，运营商给的IPv6的下发方式有两种： 交换模式，业务地址段 IPv6网关在运营商骨干路由器上，二层透传到客户端。 路由模式，业务地址段 IPv6网关在客户内部网络，运营商与客户路由器通过互联地址互联，业务地址段通过互联，静态路">
+<link rel="canonical" href="https://blog.xcouture.cc/posts/23/"><meta property="og:title" content="IPv6小记 - Couture&#x27;s Blog"><meta property="og:url" content="https://blog.xcouture.cc/posts/23/"><meta property="og:type" content="article"><meta property="article:published_time" content="2025-12-05T02:01:05Z">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
+<script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/base.css"><link rel="stylesheet" href="/assets/theme.css">
+<script src="/assets/runtime.js" defer></script></head><body>
+<button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
+<main class="page"><div><article id="post"><a class="back" href="/" aria-label="返回"><svg xmlns="http://www.w3.org/2000/svg" class="icon" version="1" viewBox="0 0 1024 1024"><path d="M774 467H415l110-108c18-18 18-48 0-66a48 48 0 0 0-67 0L273 475a47 47 0 0 0-11 11 45 45 0 0 0 13 66l183 180c19 18 48 18 67 0 18-18 18-47 0-65L415 559h359c26 0 48-21 48-46s-22-46-48-46zm0 0"/><path d="M512 93a419 419 0 1 1 0 838 419 419 0 0 1 0-838m0-93A509 509 0 0 0 0 512a509 509 0 0 0 512 512 509 509 0 0 0 512-512A509 509 0 0 0 512 0z"/></svg></a><h1>IPv6小记</h1><p>Updated at<span>Dec 5, 2025</span></p><div class="markdown-body"><p dir="auto"> 最近在调试单位的IPv6的网络，运营商对专线的方式和普通家用方式是完全不一样的了，大多数情况，运营商给的IPv6的下发方式有两种：</p>
+<ol dir="auto">
+<li>交换模式，业务地址段 IPv6网关在运营商骨干路由器上，二层透传到客户端。</li>
+<li>路由模式，业务地址段 IPv6网关在客户内部网络，运营商与客户路由器通过互联地址互联，业务地址段通过互联，静态路由下指到客户侧。</li>
+</ol>
+<p dir="auto"> 这两种方式都是可以打通网络的，用户侧这里配置没有问题的情况下，就不会有太大的问题，当然这里说的只是一般情况，我就遇到这个特殊的情况：</p>
+<p dir="auto"> 运营商给的是交换模式，这种情况在用户侧的出口防火墙配置，配置好了，但是发现就是不通，然后采取了第二种方式，用路由模式，进行配置以后，网络直接通了，IPv4和IPv6的速率可以保持一致了，测试结果如下：</p>
+<p dir="auto"><a href="/assets/images/a7f8a1a657c2a7f503d4-1600.webp" rel="noopener noreferrer" target="_blank"><img alt="" decoding="async" height="1446" loading="eager" sizes="(max-width: 600px) calc(100vw - 40px), 720px" src="/assets/images/a7f8a1a657c2a7f503d4-1600.webp" srcset="/assets/images/a7f8a1a657c2a7f503d4-800.webp 800w, /assets/images/a7f8a1a657c2a7f503d4-1600.webp 1600w" width="2266"/></a></p></div><div class="labels"><a href="https://github.com/xcouturecc/gitblog/labels/%E6%8A%80%E6%9C%AF">#技术</a></div></article><section id="comments" data-issue="23" aria-label="评论"><div class="comments-actions"><a class="button" href="https://github.com/xcouturecc/gitblog/issues/23#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a></div><div class="comments-list" aria-live="polite"></div></section><footer id="footer">© 2026 Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/xcouturecc/gitblog/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+</body></html>

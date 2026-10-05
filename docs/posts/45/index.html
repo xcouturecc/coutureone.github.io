@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>博客优化 - Couture&#x27;s Blog</title><meta name="description" content="好久没有写博客了，自己的博客功能和显示还是有点问题，刚好借助AI给优化了一下 前端展示优化 修复首页社交图标下方横线间距过大的问题 清掉 Mirror 原始图标 margin-bottom 带来的空白 横线重新居中显示 优化字体策略 改成系统字体优先 不再优先使用 IBM Plex 不引入远程字体/CDN，提升国内和海">
+<link rel="canonical" href="https://blog.xcouture.cc/posts/45/"><meta property="og:title" content="博客优化 - Couture&#x27;s Blog"><meta property="og:url" content="https://blog.xcouture.cc/posts/45/"><meta property="og:type" content="article"><meta property="article:published_time" content="2026-07-05T11:32:55Z">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="RSS" href="/feed.xml">
+<script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/base.css"><link rel="stylesheet" href="/assets/theme.css">
+<script src="/assets/runtime.js" defer></script></head><body>
+<button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
+<main class="page"><div><article id="post"><a class="back" href="/" aria-label="返回"><svg xmlns="http://www.w3.org/2000/svg" class="icon" version="1" viewBox="0 0 1024 1024"><path d="M774 467H415l110-108c18-18 18-48 0-66a48 48 0 0 0-67 0L273 475a47 47 0 0 0-11 11 45 45 0 0 0 13 66l183 180c19 18 48 18 67 0 18-18 18-47 0-65L415 559h359c26 0 48-21 48-46s-22-46-48-46zm0 0"/><path d="M512 93a419 419 0 1 1 0 838 419 419 0 0 1 0-838m0-93A509 509 0 0 0 0 512a509 509 0 0 0 512 512 509 509 0 0 0 512-512A509 509 0 0 0 512 0z"/></svg></a><h1>博客优化</h1><p>Updated at<span>Jul 5, 2026</span></p><div class="markdown-body"><blockquote>
+<p dir="auto">好久没有写博客了，自己的博客功能和显示还是有点问题，刚好借助AI给优化了一下</p>
+</blockquote>
+<h2 dir="auto">前端展示优化</h2>
+<ul dir="auto">
+<li>修复首页社交图标下方横线间距过大的问题
+<ul dir="auto">
+<li>清掉 Mirror 原始图标 <code class="notranslate">margin-bottom</code> 带来的空白</li>
+<li>横线重新居中显示</li>
+</ul>
+</li>
+<li>优化字体策略
+<ul dir="auto">
+<li>改成系统字体优先</li>
+<li>不再优先使用 IBM Plex</li>
+<li>不引入远程字体/CDN，提升国内和海外访问速度</li>
+<li>代码块使用系统等宽字体</li>
+</ul>
+</li>
+<li>修复 Markdown 表格主题颜色 bug
+<ul dir="auto">
+<li>解决浅色模式下表格黑底、文字过暗的问题</li>
+<li>表格现在会跟随浅色/深色主题切换</li>
+<li>友链表格显示正常</li>
+</ul>
+</li>
+</ul>
+<h2 dir="auto">Mermaid 流程图优化</h2>
+<ul dir="auto">
+<li>修复 Mermaid 渲染后仍显示 Loading 的问题</li>
+<li>优化流程图字体显示，避免文字被遮挡</li>
+<li>增加流程图自适应宽度</li>
+<li>增加流程图工具栏
+<ul dir="auto">
+<li>放大</li>
+<li>缩小</li>
+<li>适应宽度</li>
+<li>复制源码</li>
+<li>全屏查看</li>
+</ul>
+</li>
+<li>支持点击流程图进入全屏查看</li>
+</ul>
+<h2 dir="auto">图片与资源优化</h2>
+<ul dir="auto">
+<li>修正旧图片链接分支问题
+<ul dir="auto">
+<li>将 <code class="notranslate">gitblog@main</code> 兼容替换为 <code class="notranslate">gitblog@master</code></li>
+<li>将 raw GitHub <code class="notranslate">main</code> 图片链接兼容替换为 <code class="notranslate">master</code></li>
+</ul>
+</li>
+<li>给文章图片增加懒加载
+<ul dir="auto">
+<li><code class="notranslate">loading="lazy"</code></li>
+<li><code class="notranslate">decoding="async"</code></li>
+</ul>
+</li>
+<li>目标是通过 Typora + PicGo + GitHub Issues 写博客的流程</li>
+</ul>
+<h2 dir="auto">首页链接与社交按钮</h2>
+<ul dir="auto">
+<li>
+<p dir="auto">更新联系方式</p>
+<ul dir="auto">
+<li>
+<p dir="auto">X</p>
+</li>
+<li>
+<p dir="auto">Telegram</p>
+</li>
+<li>
+<p dir="auto">添加友链入口</p>
+</li>
+<li>
+<p dir="auto">首页图标按钮跳转到</p>
+</li>
+</ul>
+</li>
+<li>
+<p dir="auto">恢复/整理 RSS、跑步记录、友链等入口</p>
+</li>
+</ul>
+<h2 dir="auto">友链系统</h2>
+<ul dir="auto">
+<li>
+<p dir="auto">在 <code class="notranslate">gitblog</code> 中增加友链自动收录逻辑</p>
+</li>
+<li>
+<p dir="auto">友链评论格式：</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="名字：朋友博客名
+链接：https://example.com
+描述：一句话介绍这个博客" dir="auto"><pre class="notranslate">名字：朋友博客名
+链接：<span class="pl-corl">https://example.com</span>
+描述：一句话介绍这个博客</pre></div>
+</li>
+</ul></div><div class="labels"><a href="https://github.com/xcouturecc/gitblog/labels/%E6%80%BB%E7%BB%93">#总结</a></div></article><section id="comments" data-issue="45" aria-label="评论"><div class="comments-actions"><a class="button" href="https://github.com/xcouturecc/gitblog/issues/45#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a></div><div class="comments-list" aria-live="polite"></div></section><footer id="footer">© 2026 Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/xcouturecc/gitblog/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+</body></html>

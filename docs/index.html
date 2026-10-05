@@ -1,20 +1,18 @@
 <!DOCTYPE html>
-<html lang="en" class="loading">
+<html lang="zh-CN" class="loading">
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
   <link rel="shortcut icon" href="https://fav.farm/👨🏻‍💻" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title> Couture's Blog </title>
-  <!-- Mermaid CDN for diagram support -->
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
 
   <script>
     window.config = {
       organization: false,
       order: 'CREATED_AT',
       title: "Couture's Blog",
-      user: 'coutureone',
+      user: 'xcouturecc',
       repository: 'gitblog',
       authors: 'Couture',
       host: 'blog.xcouture.cc',
@@ -25,7 +23,7 @@
         { title: '跑步记录', url: 'https://run.xcouture.cc', icon: 'running' },
         { title: 'X', url: 'https://x.com/xcouturec', icon: 'twitter' },
         { title: 'Telegram', url: 'https://t.me/couturecc', icon: 'telegram' },
-        { title: 'RSS', url: 'https://raw.githubusercontent.com/coutureone/gitblog/master/feed.xml', icon: 'rss' },
+        { title: 'RSS', url: 'https://raw.githubusercontent.com/xcouturecc/gitblog/master/feed.xml', icon: 'rss' },
         { title: '友链', url: '#/posts/44', icon: 'friends' }
       ],
     }
@@ -33,7 +31,7 @@
   <style>
     /* Fast local font stack: no remote font downloads. */
     :root {
-      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
       --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       --font-mermaid: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     }
@@ -584,6 +582,80 @@
       display: none !important;
     }
 
+    /* Local system fonts and comfortable reading proportions. */
+    .page > div {
+      max-width: 720px !important;
+      padding: 0 24px 64px !important;
+    }
+
+    #post > h1, #user h1 {
+      color: var(--text-color) !important;
+      font-size: clamp(28px, 4vw, 40px) !important;
+      font-weight: 600 !important;
+      line-height: 1.25 !important;
+      text-wrap: balance !important;
+      overflow-wrap: anywhere !important;
+    }
+
+    #posts > .post {
+      padding: 24px 12px !important;
+    }
+
+    #posts h2 {
+      color: var(--text-color) !important;
+      font-size: 20px !important;
+      line-height: 1.45 !important;
+      font-weight: 600 !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      text-wrap: balance !important;
+    }
+
+    #post > .markdown-body {
+      margin-top: 48px !important;
+    }
+
+    .markdown-body {
+      font-size: 17px !important;
+      line-height: 1.85 !important;
+      word-break: normal !important;
+      overflow-wrap: anywhere !important;
+    }
+
+    .markdown-body p {
+      margin-top: 0 !important;
+      margin-bottom: 1.4em !important;
+      text-wrap: pretty !important;
+    }
+
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+      line-height: 1.35 !important;
+      font-weight: 600 !important;
+      margin-top: 1.8em !important;
+      margin-bottom: 0.7em !important;
+      text-wrap: balance !important;
+    }
+
+    .markdown-body h1, .markdown-body h2 {
+      border-bottom: none !important;
+      padding-bottom: 0 !important;
+    }
+
+    .markdown-body h1 { font-size: 1.8em !important; }
+    .markdown-body h2 { font-size: 1.45em !important; }
+    .markdown-body h3 { font-size: 1.2em !important; }
+    .markdown-body li + li { margin-top: 0.45em !important; }
+    .markdown-body pre { font-size: 14px !important; line-height: 1.6 !important; }
+    .markdown-body pre code { font-size: inherit !important; }
+
+    @media (max-width: 600px) {
+      .page > div { padding: 0 20px 48px !important; }
+      .markdown-body { font-size: 16px !important; line-height: 1.8 !important; }
+      #posts h2 { font-size: 18px !important; width: 100% !important; }
+      #posts > .post { padding: 20px 0 !important; }
+      #post > .markdown-body { margin-top: 32px !important; }
+    }
+
     /* 响应式设计 */
     @media (max-width: 768px) {
       .theme-toggle {
@@ -782,7 +854,7 @@
     if (!url) return url;
     return url
       .replace('https://cdn.jsdelivr.net/gh/coutureone/gitblog@main/', 'https://cdn.jsdelivr.net/gh/coutureone/gitblog@master/')
-      .replace('https://raw.githubusercontent.com/coutureone/gitblog/main/', 'https://raw.githubusercontent.com/coutureone/gitblog/master/');
+      .replace('https://raw.githubusercontent.com/xcouturecc/gitblog/main/', 'https://raw.githubusercontent.com/xcouturecc/gitblog/master/');
   }
 
   function normalizeBlogImages(root = document) {
@@ -847,7 +919,6 @@
   // Mermaid渲染器
   class MermaidRenderer {
     constructor() {
-      this.initialized = false;
       this.processedElements = new WeakSet();
       this.activeFullscreen = null;
       this.init();
@@ -855,13 +926,31 @@
     }
 
     init() {
-      if (typeof window.mermaid !== 'undefined') {
-        this.initialized = true;
-        configureMermaid();
-        this.renderAll();
-      } else {
-        setTimeout(() => this.init(), 100);
-      }
+      this.renderAll();
+    }
+
+    loadMermaid() {
+      if (window.mermaid) return Promise.resolve();
+      if (this.loadingPromise) return this.loadingPromise;
+      this.loadingPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
+        script.async = true;
+        const timeout = setTimeout(() => fail(), 20000);
+        const fail = () => {
+          clearTimeout(timeout);
+          script.remove();
+          this.loadingPromise = null;
+          reject(new Error('图表库加载失败，请刷新重试。'));
+        };
+        script.onload = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        script.onerror = fail;
+        document.head.appendChild(script);
+      });
+      return this.loadingPromise;
     }
 
     renderAll() {
@@ -871,8 +960,7 @@
     }
 
     async renderMermaidDiagrams(container) {
-      if (!container || !window.mermaid || !this.initialized) return;
-      configureMermaid();
+      if (!container) return;
 
       const allPres = container.querySelectorAll('pre');
 
@@ -886,6 +974,9 @@
           this.processedElements.add(block);
 
           try {
+            await this.loadMermaid();
+            if (!block.isConnected) continue;
+            configureMermaid();
             const graphDiv = document.createElement('div');
             graphDiv.className = 'mermaid-diagram';
             graphDiv.dataset.mermaidSource = text;

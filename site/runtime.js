@@ -621,7 +621,7 @@ document.querySelectorAll('.load-comments').forEach(button => {
         add.target = '_blank';
         add.rel = 'noopener noreferrer';
         add.textContent = 'Add Comments';
-        section.append(add);
+        section.insertBefore(add, section.querySelector('#footer'));
       }
     } catch (_) {
       let status = list.querySelector('.comments-status');

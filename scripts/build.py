@@ -194,6 +194,8 @@ def asset_url(name):
 
 
 def page(title, body, path='/', description='用于记录一些琐碎', article=None):
+    footer = f'''<div id="footer">© {datetime.now(ZoneInfo('Asia/Shanghai')).year} Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/{REPO}/issues" target="_blank" rel="noopener noreferrer">Source</a></div>'''
+    body = body.replace('<!-- site-footer -->', footer)
     meta = ''
     if article:
         meta = f'<meta property="og:type" content="article"><meta property="article:published_time" content="{esc(article["created_at"])}">'
@@ -205,7 +207,7 @@ def page(title, body, path='/', description='用于记录一些琐碎', article=
 <script src="{asset_url('theme-init.js')}"></script><link rel="stylesheet" href="{asset_url('base.css')}"><link rel="stylesheet" href="{asset_url('theme.css')}">
 <script src="{asset_url('runtime.js')}" defer></script></head><body>
 <button class="theme-toggle" id="theme-toggle" aria-label="切换明暗主题"><span class="sun">☀️</span><span class="moon">🌙</span></button>
-<main class="page {'article-page' if article else 'listing-page'}"><div>{body}<footer id="footer">© {datetime.now(ZoneInfo('Asia/Shanghai')).year} Couture's Blog. Powered by <a href="https://github.com/LoeiFy/Mirror" target="_blank" rel="noopener noreferrer">Mirror</a> . <a href="https://github.com/{REPO}/issues" target="_blank" rel="noopener noreferrer">Source</a></footer></div></main>
+<main class="page {'single' if article else 'home'}"><div>{body}</div></main>
 </body></html>'''
 
 
@@ -256,13 +258,18 @@ def build(output, issues, images=True):
         ('rss', 'RSS', '/feed.xml'),
         ('friends', '友链', '/posts/44/'),
     ]
-    social = ''.join(f'<a href="{esc(url)}" aria-label="{label}" title="{label}">{(ROOT / "site/icons" / (icon + ".svg")).read_text()}</a>' for icon, label, url in social_links)
-    profile = f'''<header id="user"><a href="/"><img src="{esc(avatar_src)}" width="100" height="100" alt="Couture" decoding="async"></a><h1>Couture</h1><p>Persistence is the most valuable thing</p><nav class="social" aria-label="社交链接">{social}</nav></header>'''
+    social = []
+    for icon, label, url in social_links:
+        target = ' target="_blank" rel="noopener noreferrer"' if icon != 'friends' else ''
+        svg = (ROOT / 'site/icons' / (icon + '.svg')).read_text()
+        social.append(f'<a href="{esc(url)}" aria-label="{label}" title="{label}"{target}>{svg}</a>')
+    social = ''.join(social)
+    profile = f'''<div id="user"><a href="/"><img src="{esc(avatar_src)}" width="100" height="100" alt="Couture" decoding="async"></a><h1>Couture</h1><p>Persistence is the most valuable thing</p><div class="social" aria-label="社交链接">{social}</div></div>'''
     count = (len(issues) + PER_PAGE - 1) // PER_PAGE
     for n in range(1, count + 1):
         rows = []
         for issue in issues[(n-1)*PER_PAGE:n*PER_PAGE]:
-            labels = ''.join(f'<span>{esc(label["name"])}</span>' for label in issue['labels'][:3])
+            labels = ''.join(f'<span>#{esc(label["name"])}</span>' for label in issue['labels'][:3])
             rows.append(f'<a class="post" href="/posts/{issue["number"]}/"><h2>{esc(issue["title"])}</h2><div>{labels}</div><p>{display_date(issue["created_at"])}</p></a>')
         pagination = ''
         if n > 1:
@@ -271,7 +278,7 @@ def build(output, issues, images=True):
         if n < count:
             pagination += f'<a class="button" href="/page/{n+1}/">Next</a>'
         path = '/' if n == 1 else f'/page/{n}/'
-        body = profile + '<section id="posts">' + ''.join(rows) + f'<nav class="pagination" aria-label="文章分页">{pagination}</nav></section>'
+        body = profile + '<div id="posts">' + ''.join(rows) + pagination + '<!-- site-footer --></div>'
         write(output, 'index.html' if n == 1 else f'page/{n}/index.html', page("Couture's Blog", body, path))
     for issue in issues:
         number = issue['number']
@@ -279,8 +286,8 @@ def build(output, issues, images=True):
         plain = BeautifulSoup(content, 'html.parser').get_text(' ', strip=True)
         labels = ''.join(f'<a href="{esc(label["url"].replace("api.github.com/repos/", "github.com/"))}">#{esc(label["name"])}</a>' for label in issue['labels'])
         github = issue['html_url']
-        comments_control = f'<button type="button" class="load-comments" data-count="{issue["comments"]}">View Comments ({issue["comments"]})</button>' if issue['comments'] else f'<a class="button" href="{github}#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a>'
-        body = f'''<article id="post"><a class="back" href="/" aria-label="返回">{(ROOT / "site/icons/back.svg").read_text()}</a><h1>{esc(issue['title'])}</h1><p>Updated at<span>{display_date(issue['updated_at'])}</span></p><div class="markdown-body">{content}</div><div class="labels">{labels}</div></article><section id="comments" data-issue="{number}" aria-label="评论"><div class="comments-actions">{comments_control}</div><div class="comments-list" aria-live="polite"></div></section>'''
+        comments_control = f'<button type="button" class="button load-comments" data-count="{issue["comments"]}">View Comments ({issue["comments"]})</button>' if issue['comments'] else f'<a class="button" href="{github}#new_comment_field" target="_blank" rel="noopener noreferrer">Add Comments</a>'
+        body = f'''<article id="post"><a class="back" href="/" aria-label="返回">{(ROOT / "site/icons/back.svg").read_text()}</a><h1>{esc(issue['title'])}</h1><p>Updated at<span>{display_date(issue['updated_at'])}</span></p><div class="markdown-body">{content}</div><div class="labels">{labels}</div><section id="comments" data-issue="{number}" aria-label="评论"><div class="comments-actions">{comments_control}</div><div class="comments-list" aria-live="polite"></div><!-- site-footer --></section></article>'''
         write(output, f'posts/{number}/index.html', page(issue['title'] + " - Couture's Blog", body, f'/posts/{number}/', plain, issue))
     feed = request(f'https://raw.githubusercontent.com/{REPO}/master/feed.xml').decode()
     feed = re.sub(r'https://blog\.xcouture\.cc/#/posts/(\d+)', r'https://blog.xcouture.cc/posts/\1/', feed)

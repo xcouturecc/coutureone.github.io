@@ -49,3 +49,22 @@ an explicit team scope, resolving the earlier 403 limitation. The initial
 Refresh static blog workflow completed successfully, including route tests,
 unit tests, generation, and validation of all generated pages. The previous
 production deployment and both source tags were saved before publishing.
+
+## Original layout restoration — 2026-10-07
+
+Restored original Mirror homepage structure, direct pagination buttons, label
+`#` prefixes, footer placement, title/date colors, and opacity. Removed added
+article typography, spacing, image rounding, and moved back-arrow styles.
+Local font stacks, static HTML, responsive images, and native scrolling remain.
+
+Reference: inline theme CSS from pre-optimization commit `fb49d1b`, original
+compiled base styles, and markup checked against Mirror's templates. The reference
+uses current content and optimized images, with native scrolling for measurement;
+it is not a historical screenshot. Browser comparisons found no differences in
+measured positions, dimensions, fonts, line heights, colors, padding, or margins
+for 11 homepage elements at 1280px in light/dark mode and 390px in dark mode,
+and 7 article elements at 1280px. Pagination, scrolling, two loaded comments,
+all 52 generated pages, unit tests and legacy route tests passed.
+
+Pre-release rollback tag: `rollback/before-full-layout-restore` (`f76d343`).
+Previous production: `dpl_FGRFDSBLLFvHhV9eh3yqk33HLFfa`.
